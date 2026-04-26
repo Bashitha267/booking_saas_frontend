@@ -1,7 +1,5 @@
 import React from 'react'
 import { useAuth } from '../auth/useAuth'
-import AdminDashboard from '../admin/Dashboard'
-import HotelDashboard from '../hotel/Dashboard'
 import { Navigate } from 'react-router-dom'
 
 export default function Dashboard(){
@@ -9,12 +7,13 @@ export default function Dashboard(){
   if(!user) return <Navigate to="/login" replace />
 
   if (user.role === 'admin') {
-    return <AdminDashboard />
+    // Redirect to admin portal when implemented, for now hotel
+    return <Navigate to="/hotel" replace />
   }
 
   if (user.role === 'owner' || user.role === 'staff') {
-    return <HotelDashboard />
+    return <Navigate to="/hotel" replace />
   }
 
-  return <div>Unauthorized role</div>
+  return <div className="p-10 text-center">Unauthorized role. Please contact support.</div>
 }
