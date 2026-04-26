@@ -29,11 +29,17 @@ export function AuthProvider({ children }){
     return res.data
   }
 
-  function logout(){
-    setToken(null)
-    setUser(null)
-    localStorage.removeItem('token')
-    localStorage.removeItem('user')
+  async function logout(){
+    try {
+      await api.post('/auth/logout')
+    } catch (e) {
+      console.error('Logout error:', e)
+    } finally {
+      setToken(null)
+      setUser(null)
+      localStorage.removeItem('token')
+      localStorage.removeItem('user')
+    }
   }
 
   async function register(payload){

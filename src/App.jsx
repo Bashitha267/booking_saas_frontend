@@ -10,6 +10,9 @@ import HotelDashboard from './hotel/Dashboard'
 import BookingHistory from './hotel/BookingHistory'
 import PaymentHistory from './hotel/PaymentHistory'
 import FinanceReport from './hotel/FinanceReport'
+import BookingDetails from './hotel/booking_details'
+import PropertyManagement from './hotel/Property_managment'
+import Account from './hotel/Account'
 
 function RequireAuth({ children }){
   const { user } = useAuth()
@@ -27,8 +30,11 @@ export default function App(){
         <Route path="/hotel" element={<RequireAuth><HotelLayout /></RequireAuth>}>
             <Route index element={<HotelDashboard />} />
             <Route path="bookings" element={<BookingHistory />} />
+            <Route path="bookings/:id" element={<BookingDetails />} />
             <Route path="payments" element={<PaymentHistory />} />
             <Route path="finance" element={<FinanceReport />} />
+            <Route path="property" element={<PropertyManagement />} />
+            <Route path="account" element={<Account />} />
         </Route>
 
         <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
