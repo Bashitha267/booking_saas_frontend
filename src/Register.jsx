@@ -11,7 +11,13 @@ export default function Register() {
     contact: '',
     whatsapp: '',
     address: '',
-    password: ''
+    password: '',
+    propertyName: '',
+    propertyAddress: '',
+    propertyCity: '',
+    propertyCountry: '',
+    propertyPhone: '',
+    propertyEmail: ''
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -221,6 +227,92 @@ export default function Register() {
                     onChange={handleChange}
                   />
                 </div>
+              </div>
+
+              <div className="sm:col-span-2 pt-4 border-t border-slate-100">
+                <h3 className="text-sm font-black text-slate-800">Property Details</h3>
+                <p className="text-xs text-slate-500 font-bold">This will be your first property.</p>
+              </div>
+
+              <div className="sm:col-span-2">
+                <label htmlFor="propertyName" className="label-field">Property Name</label>
+                <input
+                  id="propertyName"
+                  name="propertyName"
+                  type="text"
+                  required
+                  className="input-field"
+                  placeholder="e.g. Villax Hotel"
+                  value={form.propertyName}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label htmlFor="propertyAddress" className="label-field">Property Address</label>
+                <input
+                  id="propertyAddress"
+                  name="propertyAddress"
+                  type="text"
+                  required
+                  className="input-field"
+                  placeholder="Street, City, State"
+                  value={form.propertyAddress}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="propertyCity" className="label-field">City</label>
+                <input
+                  id="propertyCity"
+                  name="propertyCity"
+                  type="text"
+                  className="input-field"
+                  placeholder="City"
+                  value={form.propertyCity}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="propertyCountry" className="label-field">Country</label>
+                <input
+                  id="propertyCountry"
+                  name="propertyCountry"
+                  type="text"
+                  className="input-field"
+                  placeholder="Country"
+                  value={form.propertyCountry}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="propertyPhone" className="label-field">Property Phone</label>
+                <input
+                  id="propertyPhone"
+                  name="propertyPhone"
+                  type="tel"
+                  required
+                  className="input-field"
+                  placeholder="+94 11 XXX XXXX"
+                  value={form.propertyPhone}
+                  onChange={handleChange}
+                />
+              </div>
+
+              <div>
+                <label htmlFor="propertyEmail" className="label-field">Property Email</label>
+                <input
+                  id="propertyEmail"
+                  name="propertyEmail"
+                  type="email"
+                  className="input-field"
+                  placeholder="frontdesk@example.com"
+                  value={form.propertyEmail}
+                  onChange={handleChange}
+                />
               </div>
             </div>
 

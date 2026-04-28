@@ -1,28 +1,43 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-const dummyPayments = [
-  { id: 1, bookingId: 101, guestName: 'Mark Stevens', contact: '+1 234 567 890', amount: 150.00, date: '2026-04-26', reason: 'Advance Payment', method: 'Cash' },
-  { id: 2, bookingId: 102, guestName: 'Sarah Jenkins', contact: '+1 987 654 321', amount: 450.00, date: '2026-04-26', reason: 'Full Settlement', method: 'Card' },
-  { id: 3, bookingId: 103, guestName: 'Alan Turing', contact: '+44 20 7946', amount: 75.00, date: '2026-04-25', reason: 'Mini-bar Charges', method: 'Cash' },
-  { id: 4, bookingId: 104, guestName: 'Emma Watson', contact: '+44 7700 900', amount: 200.00, date: '2026-04-25', reason: 'Partial Payment', method: 'Transfer' },
-  { id: 5, bookingId: 105, guestName: 'John Snow', contact: '+1 555 010', amount: 120.00, date: '2026-04-24', reason: 'Room Service', method: 'Card' },
-  { id: 6, bookingId: 106, guestName: 'Arya Stark', contact: '+1 234 999', amount: 500.00, date: '2026-04-20', reason: 'Full Settlement', method: 'Cash' },
-  { id: 7, bookingId: 107, guestName: 'Tyrion Lannister', contact: '+1 555 123', amount: 350.00, date: '2026-04-18', reason: 'Advance', method: 'Card' },
-  { id: 8, bookingId: 108, guestName: 'Sansa Stark', contact: '+1 555 456', amount: 150.00, date: '2026-04-15', reason: 'Late Checkout', method: 'Cash' },
-  { id: 9, bookingId: 109, guestName: 'Jaime Lannister', contact: '+1 555 789', amount: 800.00, date: '2026-04-12', reason: 'Full Stay', method: 'Transfer' },
-  { id: 10, bookingId: 110, guestName: 'Robert Baratheon', contact: '+1 555 000', amount: 50.00, date: '2026-04-10', reason: 'Laundry', method: 'Cash' },
-];
+import api from '../api';
 
 export default function PaymentHistory() {
   const navigate = useNavigate();
-  const todayStr = new Date().toISOString().split('T')[0];
-
   const [searchTerm, setSearchTerm] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
+  const [payments, setPayments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const itemsPerPage = 8;
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadPayments = async () => {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const res = await api.get('/payments');
+        if (isMounted) {
+          setPayments(res.data?.data || []);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setPayments([]);
+          setLoadError('Failed to load payments.');
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    loadPayments();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleReset = () => {
     setSearchTerm('');
@@ -31,24 +46,40 @@ export default function PaymentHistory() {
     setCurrentPage(1);
   };
 
+  const normalizedPayments = useMemo(() => {
+    return payments.map((pay) => {
+      const paidDate = pay.paidAt || pay.createdAt || '';
+      return {
+        id: pay.id,
+        bookingId: pay.bookingId,
+        guestName: pay.guestName || 'Guest',
+        contact: '-',
+        amount: Number(pay.amount || 0),
+        date: paidDate ? paidDate.toString().slice(0, 10) : '',
+        reason: pay.status || 'Payment',
+        method: pay.method ? pay.method.toUpperCase() : 'CASH',
+      };
+    });
+  }, [payments]);
+
   const filteredPayments = useMemo(() => {
-    return dummyPayments.filter(pay => {
+    return normalizedPayments.filter(pay => {
       const matchesSearch = pay.guestName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             pay.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             pay.bookingId.toString().includes(searchTerm);
       
-      const payDate = new Date(pay.date);
+      const payDate = pay.date ? new Date(pay.date) : null;
       const start = fromDate ? new Date(fromDate) : null;
       const end = toDate ? new Date(toDate) : null;
 
       if (start) start.setHours(0,0,0,0);
       if (end) end.setHours(23,59,59,999);
-      payDate.setHours(12,0,0,0);
+      if (payDate) payDate.setHours(12,0,0,0);
 
-      const matchesDate = (!start || payDate >= start) && (!end || payDate <= end);
+      const matchesDate = (!start || (payDate && payDate >= start)) && (!end || (payDate && payDate <= end));
       return matchesSearch && matchesDate;
     });
-  }, [searchTerm, fromDate, toDate]);
+  }, [normalizedPayments, searchTerm, fromDate, toDate]);
 
   const totalAmount = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
   
@@ -133,6 +164,20 @@ export default function PaymentHistory() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
+              {isLoading && (
+                <tr>
+                  <td colSpan="7" className="p-10 text-center text-slate-400 text-xs font-bold">
+                    Loading payments...
+                  </td>
+                </tr>
+              )}
+              {!isLoading && loadError && (
+                <tr>
+                  <td colSpan="7" className="p-10 text-center text-rose-500 text-xs font-bold">
+                    {loadError}
+                  </td>
+                </tr>
+              )}
               {paginatedPayments.map(pay => (
                 <tr key={pay.id} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="p-5">
@@ -149,8 +194,8 @@ export default function PaymentHistory() {
                   </td>
                   <td className="p-5">
                     <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
-                      pay.method === 'Cash' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                      pay.method === 'Card' ? 'bg-blue-50 text-blue-600 border-blue-100' : 
+                      pay.method === 'CASH' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                      pay.method === 'CARD' ? 'bg-blue-50 text-blue-600 border-blue-100' : 
                       'bg-amber-50 text-amber-600 border-amber-100'
                     }`}>
                       {pay.method}
@@ -169,7 +214,7 @@ export default function PaymentHistory() {
                   </td>
                 </tr>
               ))}
-              {filteredPayments.length === 0 && (
+              {!isLoading && !loadError && filteredPayments.length === 0 && (
                 <tr>
                   <td colSpan="7" className="p-20 text-center">
                     <p className="text-slate-300 font-black uppercase tracking-[0.2em] italic">No records match your criteria</p>

@@ -1,55 +1,15 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-
-const dummyBookings = [
-  { 
-    id: 1, 
-    guestName: 'Mark Stevens', 
-    guestEmail: 'mark.s@example.com',
-    guestPhone: '+1 234 567 890',
-    roomNumber: '402', 
-    roomType: 'Deluxe',
-    guestCount: 2,
-    startDate: '2026-04-01', 
-    endDate: '2026-04-04', 
-    basePrice: 450,
-    status: 'pending',
-    paymentStatus: 'pending',
-    expenses: [
-      { id: 101, description: 'Mini Bar', amount: 25, date: '2026-04-02' },
-      { id: 102, description: 'Laundry', amount: 15, date: '2026-04-03' },
-    ],
-    payments: [
-      { id: 1, amount: 100, reason: 'Advance Payment', date: '2026-03-25' }
-    ]
-  },
-  { 
-    id: 2, 
-    guestName: 'Sarah Jenkins', 
-    guestEmail: 'sarah.j@example.com',
-    guestPhone: '+1 987 654 321',
-    roomNumber: '101', 
-    roomType: 'Deluxe',
-    guestCount: 1,
-    startDate: '2026-04-05', 
-    endDate: '2026-04-12', 
-    basePrice: 1200,
-    status: 'confirmed',
-    paymentStatus: 'paid',
-    expenses: [],
-    payments: [{ id: 1, amount: 1200, reason: 'Full Payment', date: '2026-04-05' }]
-  },
-];
+import api from '../api';
 
 export default function BookingDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  
-  const bookingData = useMemo(() => dummyBookings.find(b => b.id === Number(id)) || dummyBookings[0], [id]);
-  
-  const [booking, setBooking] = useState(bookingData);
-  const [expenses, setExpenses] = useState(booking?.expenses || []);
-  const [payments, setPayments] = useState(booking?.payments || []);
+  const [booking, setBooking] = useState(null);
+  const [expenses, setExpenses] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [newExpense, setNewExpense] = useState({ description: '', amount: '' });
   const [newPayment, setNewPayment] = useState({ reason: '', amount: '' });
 
@@ -64,6 +24,75 @@ export default function BookingDetails() {
     if (balanceDue <= 0) return 'paid';
     return 'pending';
   }, [totalPaid, balanceDue, grandTotal]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadBooking = async () => {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const [bookingRes, paymentsRes] = await Promise.all([
+          api.get(`/bookings/${id}`),
+          api.get('/payments'),
+        ]);
+
+        const bookingData = bookingRes.data?.data;
+        if (!bookingData) throw new Error('Booking not found');
+
+        const notesParts = (bookingData.notes || '').split(' | ');
+        const country = notesParts[0] || '';
+        const address = notesParts[1] || '';
+
+        const mappedBooking = {
+          id: bookingData.id,
+          guestName: bookingData.guestName,
+          guestEmail: 'N/A',
+          guestPhone: bookingData.guestContact,
+          roomNumber: bookingData.roomNumber || 'N/A',
+          roomType: bookingData.roomType || 'Unknown',
+          guestCount: (Number(bookingData.adults || 0) + Number(bookingData.children || 0)) || 1,
+          startDate: bookingData.checkInDate,
+          endDate: bookingData.checkOutDate,
+          status: bookingData.status,
+          nicPassport: bookingData.guestNic || 'N/A',
+          country,
+          address,
+          adults: bookingData.adults,
+          children: bookingData.children,
+        };
+
+        const paymentRows = paymentsRes.data?.data || [];
+        const bookingPayments = paymentRows
+          .filter((pay) => pay.bookingId === bookingData.id)
+          .map((pay) => ({
+            id: pay.id,
+            amount: Number(pay.amount || 0),
+            reason: pay.method || 'Payment',
+            date: (pay.paidAt || pay.createdAt || '').toString().slice(0, 10),
+          }));
+
+        if (isMounted) {
+          setBooking(mappedBooking);
+          setPayments(bookingPayments);
+          setExpenses([]);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setLoadError('Failed to load booking.');
+          setBooking(null);
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    if (id) {
+      loadBooking();
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [id]);
 
   const handleAddExpense = (e) => {
     e.preventDefault();
@@ -91,6 +120,33 @@ export default function BookingDetails() {
     setNewPayment({ reason: '', amount: '' });
   };
 
+  const handleStatusChange = async (nextStatus) => {
+    if (!booking) return;
+    const previousStatus = booking.status;
+    setBooking((prev) => ({ ...prev, status: nextStatus }));
+    try {
+      await api.put(`/bookings/${booking.id}`, { status: nextStatus });
+    } catch (error) {
+      setBooking((prev) => ({ ...prev, status: previousStatus }));
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center text-slate-400 text-xs font-bold">
+        Loading booking...
+      </div>
+    );
+  }
+
+  if (!booking || loadError) {
+    return (
+      <div className="p-8 text-center text-rose-500 text-xs font-bold">
+        {loadError || 'Booking not found.'}
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 md:p-8 bg-slate-50 min-h-full max-w-7xl mx-auto">
       {/* Header */}
@@ -113,13 +169,13 @@ export default function BookingDetails() {
         <div className="flex items-center gap-3">
           <select 
             value={booking.status}
-            onChange={(e) => setBooking({...booking, status: e.target.value})}
+            onChange={(e) => handleStatusChange(e.target.value)}
             className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-black text-slate-700 outline-none shadow-sm"
           >
             <option value="pending">Mark as Pending</option>
             <option value="confirmed">Mark as Confirmed</option>
             <option value="checked-in">Check In</option>
-            <option value="checkout">Check Out</option>
+            <option value="checked-out">Check Out</option>
             <option value="cancelled">Cancel Booking</option>
           </select>
           <button className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-lg hover:bg-blue-600 transition-all">

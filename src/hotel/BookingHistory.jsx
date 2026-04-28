@@ -1,22 +1,84 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-
-const dummyBookings = [
-  { id: 1, guestName: 'Mark Stevens', guestEmail: 'mark.s@example.com', guestPhone: '+1 234 567 890', roomNumber: '402', roomType: 'Deluxe', guestCount: 2, startDate: '2026-04-01', endDate: '2026-04-04', status: 'pending', paymentStatus: 'pending' },
-  { id: 2, guestName: 'Sarah Jenkins', guestEmail: 'sarah.j@example.com', guestPhone: '+1 987 654 321', roomNumber: '101', roomType: 'Deluxe', guestCount: 1, startDate: '2026-04-05', endDate: '2026-04-12', status: 'confirmed', paymentStatus: 'paid' },
-  { id: 3, guestName: 'Dr. Alan Turing', guestEmail: 'alan@enigma.com', guestPhone: '+44 20 7946 0000', roomNumber: '303', roomType: 'Suite', guestCount: 1, startDate: '2026-04-13', endDate: '2026-04-18', status: 'checked-in', paymentStatus: 'paid' },
-  { id: 4, guestName: 'Emma Watson', guestEmail: 'emma@hogwarts.edu', guestPhone: '+44 7700 900077', roomNumber: '201', roomType: 'Standard', guestCount: 2, startDate: '2026-04-18', endDate: '2026-04-22', status: 'confirmed', paymentStatus: 'not paid' },
-  { id: 5, guestName: 'Business Group', guestEmail: 'info@business.com', guestPhone: '+1 555 010 999', roomNumber: '102', roomType: 'Standard', guestCount: 4, startDate: '2026-04-25', endDate: '2026-04-28', status: 'cancelled', paymentStatus: 'not paid' },
-];
+import api from '../api';
 
 export default function BookingHistory() {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [paymentFilter, setPaymentFilter] = useState('all');
+  const [bookings, setBookings] = useState([]);
+  const [paymentsByBooking, setPaymentsByBooking] = useState({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadData = async () => {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const [bookingsRes, paymentsRes] = await Promise.all([
+          api.get('/bookings'),
+          api.get('/payments'),
+        ]);
+
+        const bookingRows = bookingsRes.data?.data || [];
+        const paymentRows = paymentsRes.data?.data || [];
+
+        const paymentsMap = paymentRows.reduce((acc, pay) => {
+          const bookingId = pay.bookingId;
+          if (!bookingId) return acc;
+          const prev = acc[bookingId] || { total: 0, count: 0 };
+          acc[bookingId] = {
+            total: prev.total + Number(pay.amount || 0),
+            count: prev.count + 1,
+          };
+          return acc;
+        }, {});
+
+        if (isMounted) {
+          setBookings(bookingRows);
+          setPaymentsByBooking(paymentsMap);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setLoadError('Failed to load bookings.');
+          setBookings([]);
+          setPaymentsByBooking({});
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const normalizedBookings = useMemo(() => {
+    return bookings.map((b) => {
+      const paymentInfo = paymentsByBooking[b.id];
+      const paymentStatus = paymentInfo && paymentInfo.total > 0 ? 'paid' : 'pending';
+      return {
+        id: b.id,
+        guestName: b.guestName,
+        guestPhone: b.guestContact || '- ',
+        roomNumber: b.roomNumber || 'N/A',
+        roomType: b.roomType || 'Unknown',
+        guestCount: (Number(b.adults || 0) + Number(b.children || 0)) || 1,
+        startDate: b.checkInDate,
+        endDate: b.checkOutDate,
+        status: b.status,
+        paymentStatus,
+      };
+    });
+  }, [bookings, paymentsByBooking]);
 
   const filteredBookings = useMemo(() => {
-    return dummyBookings.filter(b => {
+    return normalizedBookings.filter(b => {
       const matchesSearch = b.guestName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            b.roomNumber.includes(searchTerm) ||
                            b.guestPhone.includes(searchTerm);
@@ -33,6 +95,7 @@ export default function BookingHistory() {
       case 'pending': return 'bg-amber-100 text-amber-700';
       case 'checked-in': return 'bg-blue-100 text-blue-700';
       case 'checkout': return 'bg-slate-100 text-slate-700';
+      case 'checked-out': return 'bg-slate-100 text-slate-700';
       case 'cancelled': return 'bg-red-100 text-red-700';
       default: return 'bg-slate-100 text-slate-700';
     }
@@ -87,7 +150,7 @@ export default function BookingHistory() {
               <option value="pending">Pending</option>
               <option value="confirmed">Confirmed</option>
               <option value="checked-in">Checked In</option>
-              <option value="checkout">Checkout</option>
+              <option value="checked-out">Checked Out</option>
               <option value="cancelled">Cancelled</option>
             </select>
 
@@ -121,6 +184,20 @@ export default function BookingHistory() {
               </tr>
               </thead>
               <tbody>
+                {isLoading && (
+                  <tr>
+                    <td colSpan="7" className="px-8 py-12 text-center text-slate-400 text-xs font-bold">
+                      Loading bookings...
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && loadError && (
+                  <tr>
+                    <td colSpan="7" className="px-8 py-12 text-center text-rose-500 text-xs font-bold">
+                      {loadError}
+                    </td>
+                  </tr>
+                )}
                 {filteredBookings.map((booking) => (
                   <tr 
                     key={booking.id} 
@@ -172,7 +249,7 @@ export default function BookingHistory() {
                     </td>
                   </tr>
                 ))}
-                {filteredBookings.length === 0 && (
+                {!isLoading && !loadError && filteredBookings.length === 0 && (
                   <tr>
                     <td colSpan="7" className="px-8 py-20 text-center">
                       <div className="flex flex-col items-center">

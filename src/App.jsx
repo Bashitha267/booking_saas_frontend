@@ -20,6 +20,13 @@ function RequireAuth({ children }){
   return children
 }
 
+function RequireRole({ allowed, children }){
+  const { user } = useAuth()
+  if(!user) return <Navigate to="/login" replace />
+  if(!allowed.includes(user.role)) return <Navigate to="/hotel" replace />
+  return children
+}
+
 export default function App(){
   return (
     <Routes>
@@ -28,13 +35,13 @@ export default function App(){
         
         {/* Hotel Routes */}
         <Route path="/hotel" element={<RequireAuth><HotelLayout /></RequireAuth>}>
-            <Route index element={<HotelDashboard />} />
-            <Route path="bookings" element={<BookingHistory />} />
-            <Route path="bookings/:id" element={<BookingDetails />} />
-            <Route path="payments" element={<PaymentHistory />} />
-            <Route path="finance" element={<FinanceReport />} />
-            <Route path="property" element={<PropertyManagement />} />
-            <Route path="account" element={<Account />} />
+          <Route index element={<RequireRole allowed={['owner', 'admin', 'staff']}><HotelDashboard /></RequireRole>} />
+          <Route path="bookings" element={<RequireRole allowed={['owner', 'admin', 'staff']}><BookingHistory /></RequireRole>} />
+          <Route path="bookings/:id" element={<RequireRole allowed={['owner', 'admin', 'staff']}><BookingDetails /></RequireRole>} />
+          <Route path="payments" element={<RequireRole allowed={['owner', 'admin']}><PaymentHistory /></RequireRole>} />
+          <Route path="finance" element={<RequireRole allowed={['owner', 'admin']}><FinanceReport /></RequireRole>} />
+          <Route path="property" element={<RequireRole allowed={['owner', 'admin']}><PropertyManagement /></RequireRole>} />
+          <Route path="account" element={<RequireRole allowed={['owner', 'admin']}><Account /></RequireRole>} />
         </Route>
 
         <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
