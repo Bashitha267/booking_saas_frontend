@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import api from '../api';
 
 export default function Account() {
   const [hotelInfo, setHotelInfo] = useState({
@@ -8,22 +9,106 @@ export default function Account() {
     address: '123 Beach Road, Galle, Sri Lanka'
   });
 
-  const [staffList, setStaffList] = useState([
-    { id: 1, name: 'Anura Kumara', contact: '0771112223', username: 'anura_staff', role: 'Receptionist' },
-    { id: 2, name: 'Chaminda Silva', contact: '0774445556', username: 'chaminda_m', role: 'Manager' },
-  ]);
+  const [staffList, setStaffList] = useState([]);
+  const [properties, setProperties] = useState([]);
+  const [isLoadingProperties, setIsLoadingProperties] = useState(false);
+  const [staffStatus, setStaffStatus] = useState({ type: '', message: '' });
 
   const [showAddStaff, setShowAddStaff] = useState(false);
   const [showEditStaff, setShowEditStaff] = useState(false);
   const [editingStaff, setEditingStaff] = useState(null);
-  const [newStaff, setNewStaff] = useState({ name: '', contact: '', username: '', password: '' });
+  const [newStaff, setNewStaff] = useState({
+    firstName: '',
+    lastName: '',
+    nicNumber: '',
+    contact: '',
+    whatsapp: '',
+    address: '',
+    username: '',
+    password: '',
+    propertyId: '',
+  });
 
-  const handleAddStaff = (e) => {
+  useEffect(() => {
+    let isMounted = true;
+    const loadProperties = async () => {
+      setIsLoadingProperties(true);
+      try {
+        const res = await api.get('/properties');
+        if (isMounted) {
+          const items = res.data?.data || [];
+          setProperties(items);
+          if (!newStaff.propertyId && items.length) {
+            setNewStaff((prev) => ({ ...prev, propertyId: String(items[0].id) }));
+          }
+        }
+      } catch (error) {
+        if (isMounted) setProperties([]);
+      } finally {
+        if (isMounted) setIsLoadingProperties(false);
+      }
+    };
+
+    loadProperties();
+    return () => {
+      isMounted = false;
+    };
+  }, [newStaff.propertyId]);
+
+  const propertyOptions = useMemo(() => properties.map((p) => ({ id: p.id, name: p.name })), [properties]);
+
+  const handleAddStaff = async (e) => {
     e.preventDefault();
-    const id = staffList.length + 1;
-    setStaffList([...staffList, { ...newStaff, id, role: 'Staff', disabled: false }]);
-    setNewStaff({ name: '', contact: '', username: '', password: '' });
-    setShowAddStaff(false);
+    setStaffStatus({ type: '', message: '' });
+
+    try {
+      const payload = {
+        firstName: newStaff.firstName.trim(),
+        lastName: newStaff.lastName.trim(),
+        nicNumber: newStaff.nicNumber.trim() || null,
+        contact: newStaff.contact.trim(),
+        whatsapp: newStaff.whatsapp.trim(),
+        address: newStaff.address.trim(),
+        username: newStaff.username.trim(),
+        password: newStaff.password,
+        propertyId: Number(newStaff.propertyId),
+      };
+
+      const res = await api.post('/staff/register', payload);
+      const created = res.data?.staff;
+      const fullName = `${payload.firstName} ${payload.lastName}`.trim();
+
+      if (created) {
+        setStaffList((prev) => ([
+          ...prev,
+          {
+            id: created.id,
+            name: fullName || created.username,
+            contact: payload.contact,
+            username: created.username,
+            role: 'Staff',
+            disabled: false,
+          },
+        ]));
+      }
+
+      setNewStaff({
+        firstName: '',
+        lastName: '',
+        nicNumber: '',
+        contact: '',
+        whatsapp: '',
+        address: '',
+        username: '',
+        password: '',
+        propertyId: newStaff.propertyId || '',
+      });
+      setStaffStatus({ type: 'success', message: 'Staff account created.' });
+      setShowAddStaff(false);
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to create staff.';
+      setStaffStatus({ type: 'error', message });
+    }
   };
 
   const handleEditStaff = (e) => {
@@ -106,7 +191,10 @@ export default function Account() {
               Staff Management
             </h2>
             <button 
-              onClick={() => setShowAddStaff(true)}
+              onClick={() => {
+                setStaffStatus({ type: '', message: '' });
+                setShowAddStaff(true);
+              }}
               className="bg-emerald-500 hover:bg-emerald-600 text-white px-5 py-2.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all shadow-lg active:scale-95"
             >
               + New Staff Member
@@ -174,6 +262,13 @@ export default function Account() {
                     </td>
                   </tr>
                 ))}
+                {!staffList.length && (
+                  <tr>
+                    <td colSpan="5" className="py-6 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                      No staff added yet
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -192,15 +287,27 @@ export default function Account() {
             </div>
 
             <form onSubmit={handleAddStaff} className="space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Full Name</label>
-                <input 
-                  required
-                  type="text" 
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
-                  value={newStaff.name}
-                  onChange={e => setNewStaff({...newStaff, name: e.target.value})}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">First Name</label>
+                  <input 
+                    required
+                    type="text" 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
+                    value={newStaff.firstName}
+                    onChange={e => setNewStaff({ ...newStaff, firstName: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Last Name</label>
+                  <input 
+                    required
+                    type="text" 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
+                    value={newStaff.lastName}
+                    onChange={e => setNewStaff({ ...newStaff, lastName: e.target.value })}
+                  />
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Contact Number</label>
@@ -209,8 +316,58 @@ export default function Account() {
                   type="text" 
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
                   value={newStaff.contact}
-                  onChange={e => setNewStaff({...newStaff, contact: e.target.value})}
+                  onChange={e => setNewStaff({ ...newStaff, contact: e.target.value })}
                 />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">WhatsApp Number</label>
+                <input 
+                  required
+                  type="text" 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
+                  value={newStaff.whatsapp}
+                  onChange={e => setNewStaff({ ...newStaff, whatsapp: e.target.value })}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Address</label>
+                <input 
+                  required
+                  type="text" 
+                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
+                  value={newStaff.address}
+                  onChange={e => setNewStaff({ ...newStaff, address: e.target.value })}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">NIC (optional)</label>
+                  <input 
+                    type="text" 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
+                    value={newStaff.nicNumber}
+                    onChange={e => setNewStaff({ ...newStaff, nicNumber: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Property</label>
+                  <select
+                    required
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
+                    value={newStaff.propertyId}
+                    onChange={e => setNewStaff({ ...newStaff, propertyId: e.target.value })}
+                  >
+                    {!propertyOptions.length && (
+                      <option value="">No properties found</option>
+                    )}
+                    {propertyOptions.map((property) => (
+                      <option key={property.id} value={property.id}>{property.name}</option>
+                    ))}
+                  </select>
+                  {isLoadingProperties && (
+                    <p className="text-[9px] font-bold text-slate-400">Loading properties...</p>
+                  )}
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -220,7 +377,7 @@ export default function Account() {
                     type="text" 
                     className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
                     value={newStaff.username}
-                    onChange={e => setNewStaff({...newStaff, username: e.target.value})}
+                    onChange={e => setNewStaff({ ...newStaff, username: e.target.value })}
                   />
                 </div>
                 <div className="space-y-2">
@@ -230,10 +387,16 @@ export default function Account() {
                     type="password" 
                     className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-6 py-4 text-sm font-bold outline-none"
                     value={newStaff.password}
-                    onChange={e => setNewStaff({...newStaff, password: e.target.value})}
+                    onChange={e => setNewStaff({ ...newStaff, password: e.target.value })}
                   />
                 </div>
               </div>
+
+              {staffStatus.message && (
+                <p className={`text-[9px] font-black uppercase tracking-widest ${staffStatus.type === 'error' ? 'text-rose-500' : 'text-emerald-600'}`}>
+                  {staffStatus.message}
+                </p>
+              )}
 
               <button type="submit" className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] mt-6 shadow-xl hover:bg-emerald-600 transition-all">
                 Create Staff Account

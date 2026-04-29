@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Chart as ChartJS,
   CategoryScale,
@@ -11,6 +11,7 @@ import {
   Filler
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
+import api from '../api';
 
 ChartJS.register(
   CategoryScale,
@@ -23,56 +24,215 @@ ChartJS.register(
   Filler
 );
 
-const financeData = {
-  summary: {
-    totalRevenue: 1254000.00,
-    pendingPayments: 85200.00,
-    occupancyRate: 78,
-    netProfit: 985000.00
-  },
-  methodBreakdown: [
-    { method: 'Cash', amount: 450000.00, percentage: 36, color: 'bg-emerald-500' },
-    { method: 'Card', amount: 620000.00, percentage: 49, color: 'bg-blue-500' },
-    { method: 'Transfer', amount: 184000.00, percentage: 15, color: 'bg-amber-500' }
-  ],
-  roomTypePopularity: [
-    { type: 'Deluxe Rooms', count: 45, percentage: 55, color: 'bg-blue-600' },
-    { type: 'Luxury Suites', count: 22, percentage: 27, color: 'bg-indigo-600' },
-    { type: 'Standard Rooms', count: 15, percentage: 18, color: 'bg-slate-400' }
-  ],
-  categoryBreakdown: [
-    { name: 'Room Charges', amount: 850000.00, color: 'text-blue-600' },
-    { name: 'Food & Beverage', amount: 245000.00, color: 'text-emerald-600' },
-    { name: 'Laundry', amount: 45000.00, color: 'text-amber-600' },
-    { name: 'Mini Bar', amount: 114000.00, color: 'text-rose-600' }
-  ],
-  monthlyPerformance: [
-    { month: 'Jan', revenue: 850000, bookings: 42 },
-    { month: 'Feb', revenue: 920000, bookings: 48 },
-    { month: 'Mar', revenue: 1100000, bookings: 56 },
-    { month: 'Apr', revenue: 1254000, bookings: 64 },
-    { month: 'May', revenue: 1150000, bookings: 59 },
-    { month: 'Jun', revenue: 1380000, bookings: 72 }
-  ],
-  expenses: [
-    { id: 1, category: 'Electricity Bill', amount: 85000.00, date: '2024-04-15', status: 'Paid', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
-    { id: 2, category: 'Water Bill', amount: 12400.00, date: '2024-04-12', status: 'Paid', icon: 'M19 14l-7 7m0 0l-7-7m7 7V3' },
-    { id: 3, category: 'Staff Salaries', amount: 450000.00, date: '2024-04-01', status: 'Paid', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z' },
-    { id: 4, category: 'Maintenance', amount: 35000.00, date: '2024-04-20', status: 'Pending', icon: 'M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 011-1h1a2 2 0 100-4H7a1 1 0 01-1-1V7a1 1 0 011-1h3a1 1 0 001-1V4z' }
-  ]
+const methodColors = {
+  cash: 'bg-emerald-500',
+  card: 'bg-blue-500',
+  bank: 'bg-amber-500',
+  online: 'bg-indigo-500',
 };
+
+const typePalette = ['bg-blue-600', 'bg-indigo-600', 'bg-emerald-600', 'bg-amber-500', 'bg-slate-400'];
 
 export default function FinanceReport() {
   const [reportPeriod, setReportPeriod] = useState('This Month');
+  const [bookings, setBookings] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
 
-  const totalExpenses = financeData.expenses.reduce((acc, exp) => acc + exp.amount, 0);
+  useEffect(() => {
+    let isMounted = true;
+    const loadData = async () => {
+      setIsLoading(true);
+      setLoadError('');
+      try {
+        const [bookingsRes, paymentsRes, roomsRes] = await Promise.allSettled([
+          api.get('/bookings'),
+          api.get('/payments'),
+          api.get('/rooms'),
+        ]);
+
+        if (isMounted) {
+          if (bookingsRes.status === 'fulfilled') {
+            setBookings(bookingsRes.value.data?.data || []);
+          }
+          if (paymentsRes.status === 'fulfilled') {
+            setPayments(paymentsRes.value.data?.data || []);
+          }
+          if (roomsRes.status === 'fulfilled') {
+            setRooms(roomsRes.value.data?.data || []);
+          }
+
+          const failed = [
+            bookingsRes.status !== 'fulfilled' ? 'bookings' : null,
+            paymentsRes.status !== 'fulfilled' ? 'payments' : null,
+            roomsRes.status !== 'fulfilled' ? 'rooms' : null,
+          ].filter(Boolean);
+
+          if (failed.length) {
+            setLoadError(`Failed to load ${failed.join(', ')} data.`);
+          }
+        }
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const reportRange = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now);
+    if (reportPeriod === 'This Week') {
+      start.setDate(now.getDate() - 6);
+    } else if (reportPeriod === 'This Month') {
+      start.setDate(1);
+    } else {
+      start.setMonth(0, 1);
+    }
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(now);
+    end.setHours(23, 59, 59, 999);
+    return { start, end };
+  }, [reportPeriod]);
+
+  const filteredPayments = useMemo(() => {
+    return payments.filter((payment) => {
+      const refDate = payment.paidAt || payment.createdAt;
+      if (!refDate) return false;
+      const date = new Date(refDate);
+      return date >= reportRange.start && date <= reportRange.end;
+    });
+  }, [payments, reportRange]);
+
+  const filteredBookings = useMemo(() => {
+    return bookings.filter((booking) => {
+      if (!booking.checkInDate) return false;
+      const date = new Date(booking.checkInDate);
+      return date >= reportRange.start && date <= reportRange.end;
+    });
+  }, [bookings, reportRange]);
+
+  const totalRevenue = useMemo(() => (
+    filteredPayments
+      .filter((pay) => pay.status !== 'refunded')
+      .reduce((acc, pay) => acc + Number(pay.amount || 0), 0)
+  ), [filteredPayments]);
+
+  const pendingPayments = useMemo(() => (
+    filteredPayments
+      .filter((pay) => pay.status === 'pending')
+      .reduce((acc, pay) => acc + Number(pay.amount || 0), 0)
+  ), [filteredPayments]);
+
+  const occupancyRate = useMemo(() => {
+    if (!rooms.length) return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const bookedRooms = new Set();
+    bookings.forEach((booking) => {
+      if (booking.status === 'cancelled') return;
+      const start = new Date(booking.checkInDate);
+      const end = new Date(booking.checkOutDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
+      if (today >= start && today <= end) {
+        bookedRooms.add(booking.roomId);
+      }
+    });
+    return Math.round((bookedRooms.size / rooms.length) * 100);
+  }, [rooms, bookings]);
+
+  const roomById = useMemo(() => {
+    const map = new Map();
+    rooms.forEach((room) => map.set(room.id, room));
+    return map;
+  }, [rooms]);
+
+  const roomTypePopularity = useMemo(() => {
+    const counts = new Map();
+    filteredBookings.forEach((booking) => {
+      const room = roomById.get(booking.roomId);
+      const type = room?.roomType || 'Unspecified';
+      counts.set(type, (counts.get(type) || 0) + 1);
+    });
+    const total = Array.from(counts.values()).reduce((acc, value) => acc + value, 0) || 1;
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([type, count], index) => ({
+        type,
+        count,
+        percentage: Math.round((count / total) * 100),
+        color: typePalette[index % typePalette.length],
+      }));
+  }, [filteredBookings, roomById]);
+
+  const methodBreakdown = useMemo(() => {
+    const totals = new Map();
+    filteredPayments.forEach((payment) => {
+      const method = (payment.method || 'cash').toLowerCase();
+      totals.set(method, (totals.get(method) || 0) + Number(payment.amount || 0));
+    });
+    const total = Array.from(totals.values()).reduce((acc, value) => acc + value, 0) || 1;
+    return Array.from(totals.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([method, amount]) => ({
+        method: method.charAt(0).toUpperCase() + method.slice(1),
+        amount,
+        percentage: Math.round((amount / total) * 100),
+        color: methodColors[method] || 'bg-slate-400',
+      }));
+  }, [filteredPayments]);
+
+  const monthBuckets = useMemo(() => {
+    const now = new Date();
+    return Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      return {
+        key: `${date.getFullYear()}-${date.getMonth()}`,
+        label: date.toLocaleString('default', { month: 'short' }),
+      };
+    });
+  }, []);
+
+  const monthlyPerformance = useMemo(() => {
+    const revenueByMonth = new Map();
+    const bookingsByMonth = new Map();
+    filteredPayments.forEach((payment) => {
+      const refDate = payment.paidAt || payment.createdAt;
+      if (!refDate) return;
+      const date = new Date(refDate);
+      const key = `${date.getFullYear()}-${date.getMonth()}`;
+      revenueByMonth.set(key, (revenueByMonth.get(key) || 0) + Number(payment.amount || 0));
+    });
+    filteredBookings.forEach((booking) => {
+      if (!booking.checkInDate) return;
+      const date = new Date(booking.checkInDate);
+      const key = `${date.getFullYear()}-${date.getMonth()}`;
+      bookingsByMonth.set(key, (bookingsByMonth.get(key) || 0) + 1);
+    });
+    return monthBuckets.map((bucket) => ({
+      month: bucket.label,
+      revenue: revenueByMonth.get(bucket.key) || 0,
+      bookings: bookingsByMonth.get(bucket.key) || 0,
+    }));
+  }, [filteredPayments, filteredBookings, monthBuckets]);
+
+  const expenses = [];
+  const totalExpenses = expenses.reduce((acc, exp) => acc + exp.amount, 0);
+  const netProfit = totalRevenue - totalExpenses;
 
   const chartData = {
-    labels: financeData.monthlyPerformance.map(d => d.month),
+    labels: monthlyPerformance.map(d => d.month),
     datasets: [
       {
         label: 'Revenue',
-        data: financeData.monthlyPerformance.map(d => d.revenue),
+        data: monthlyPerformance.map(d => d.revenue),
         fill: true,
         borderColor: '#3b82f6',
         borderWidth: 2,
@@ -109,7 +269,7 @@ export default function FinanceReport() {
           label: (context) => {
             const index = context.dataIndex;
             const revenue = context.raw;
-            const bookings = financeData.monthlyPerformance[index].bookings;
+            const bookings = monthlyPerformance[index]?.bookings || 0;
             return [
               `Rs. ${revenue.toLocaleString()}`,
               `${bookings} Bookings`
@@ -165,13 +325,24 @@ export default function FinanceReport() {
         </div>
       </div>
 
+      {(isLoading || loadError) && (
+        <div className="mb-6 flex flex-wrap items-center gap-3 text-[9px] font-black uppercase tracking-widest">
+          {isLoading && (
+            <span className="bg-slate-100 text-slate-500 px-3 py-1 rounded-full">Loading data...</span>
+          )}
+          {loadError && (
+            <span className="bg-rose-50 text-rose-600 px-3 py-1 rounded-full">{loadError}</span>
+          )}
+        </div>
+      )}
+
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {[
-          { label: 'Gross Revenue', value: financeData.summary.totalRevenue, trend: '+12.5%', color: 'text-blue-600' },
-          { label: 'Total Expenses', value: totalExpenses, trend: '+4.2%', color: 'text-rose-600' },
-          { label: 'Current Occupancy', value: `${financeData.summary.occupancyRate}%`, trend: '+8%', color: 'text-emerald-600' },
-          { label: 'Net Profit', value: financeData.summary.totalRevenue - totalExpenses, trend: '+15.1%', color: 'text-indigo-600' }
+          { label: 'Gross Revenue', value: totalRevenue, trend: '--', color: 'text-blue-600' },
+          { label: 'Pending Payments', value: pendingPayments, trend: '--', color: 'text-amber-600' },
+          { label: 'Current Occupancy', value: `${occupancyRate}%`, trend: '--', color: 'text-emerald-600' },
+          { label: 'Net Profit', value: netProfit, trend: '--', color: 'text-indigo-600' }
         ].map((stat, i) => (
           <div key={i} className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 group hover:shadow-xl hover:shadow-slate-200/50 transition-all">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">{stat.label}</p>
@@ -179,7 +350,7 @@ export default function FinanceReport() {
               <h3 className={`text-2xl font-black tracking-tighter ${stat.color}`}>
                 {typeof stat.value === 'number' ? `Rs. ${stat.value.toLocaleString()}` : stat.value}
               </h3>
-              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${stat.trend.startsWith('+') && stat.label !== 'Total Expenses' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${stat.trend === '--' ? 'bg-slate-100 text-slate-500' : stat.trend.startsWith('+') && stat.label !== 'Total Expenses' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                 {stat.trend}
               </span>
             </div>
@@ -230,7 +401,7 @@ export default function FinanceReport() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {financeData.expenses.map((exp) => (
+                  {expenses.map((exp) => (
                     <tr key={exp.id} className="group hover:bg-slate-50/50 transition-colors">
                       <td className="py-4">
                         <div className="flex items-center gap-3">
@@ -255,6 +426,13 @@ export default function FinanceReport() {
                       </td>
                     </tr>
                   ))}
+                  {!expenses.length && (
+                    <tr>
+                      <td colSpan="4" className="py-6 text-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                        No expenses recorded yet
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -264,7 +442,7 @@ export default function FinanceReport() {
             <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
               <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Booking Popularity</h3>
               <div className="space-y-6">
-                {financeData.roomTypePopularity.map((item, i) => (
+                {roomTypePopularity.map((item, i) => (
                   <div key={i} className="space-y-2">
                     <div className="flex justify-between items-end">
                       <span className="text-xs font-black text-slate-700">{item.type}</span>
@@ -275,13 +453,16 @@ export default function FinanceReport() {
                     </div>
                   </div>
                 ))}
+                {!roomTypePopularity.length && (
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No bookings yet</p>
+                )}
               </div>
             </div>
 
             <div className="bg-white p-8 rounded-[2.5rem] shadow-sm border border-slate-100">
               <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-8">Payment Methods</h3>
               <div className="space-y-6">
-                {financeData.methodBreakdown.map((item, i) => (
+                {methodBreakdown.map((item, i) => (
                   <div key={i} className="space-y-2">
                     <div className="flex justify-between items-end">
                       <span className="text-xs font-black text-slate-700">{item.method}</span>
@@ -292,6 +473,9 @@ export default function FinanceReport() {
                     </div>
                   </div>
                 ))}
+                {!methodBreakdown.length && (
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No payments yet</p>
+                )}
               </div>
             </div>
           </div>

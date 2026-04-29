@@ -11,7 +11,24 @@ export default function BookingDetails() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [newExpense, setNewExpense] = useState({ description: '', amount: '' });
-  const [newPayment, setNewPayment] = useState({ reason: '', amount: '' });
+  const [newPayment, setNewPayment] = useState({ method: 'cash', status: 'paid', amount: '' });
+  const [isRemovingPayment, setIsRemovingPayment] = useState(false);
+  const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [detailsMessage, setDetailsMessage] = useState({ type: '', message: '' });
+  const [editForm, setEditForm] = useState({
+    guestName: '',
+    guestContact: '',
+    guestNic: '',
+    country: '',
+    address: '',
+    checkInDate: '',
+    checkOutDate: '',
+    adults: 1,
+    children: 0,
+    status: 'pending',
+  });
+  const [editingExpenseId, setEditingExpenseId] = useState(null);
+  const [expenseDraft, setExpenseDraft] = useState({ description: '', amount: '' });
 
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const totalPaid = payments.reduce((sum, pay) => sum + pay.amount, 0);
@@ -67,12 +84,25 @@ export default function BookingDetails() {
           .map((pay) => ({
             id: pay.id,
             amount: Number(pay.amount || 0),
-            reason: pay.method || 'Payment',
+            method: pay.method || 'cash',
+            status: pay.status || 'paid',
             date: (pay.paidAt || pay.createdAt || '').toString().slice(0, 10),
           }));
 
         if (isMounted) {
           setBooking(mappedBooking);
+          setEditForm({
+            guestName: bookingData.guestName || '',
+            guestContact: bookingData.guestContact || '',
+            guestNic: bookingData.guestNic || '',
+            country,
+            address,
+            checkInDate: bookingData.checkInDate || '',
+            checkOutDate: bookingData.checkOutDate || '',
+            adults: Number(bookingData.adults || 0),
+            children: Number(bookingData.children || 0),
+            status: bookingData.status || 'pending',
+          });
           setPayments(bookingPayments);
           setExpenses([]);
         }
@@ -107,17 +137,173 @@ export default function BookingDetails() {
     setNewExpense({ description: '', amount: '' });
   };
 
-  const handleAddPayment = (e) => {
+  const handleStartEditExpense = (expense) => {
+    setEditingExpenseId(expense.id);
+    setExpenseDraft({ description: expense.description, amount: String(expense.amount) });
+  };
+
+  const handleCancelEditExpense = () => {
+    setEditingExpenseId(null);
+    setExpenseDraft({ description: '', amount: '' });
+  };
+
+  const handleSaveExpense = (expenseId) => {
+    if (!expenseDraft.description || !expenseDraft.amount) return;
+    setExpenses((prev) => prev.map((exp) => (
+      exp.id === expenseId
+        ? { ...exp, description: expenseDraft.description, amount: parseFloat(expenseDraft.amount) }
+        : exp
+    )));
+    setEditingExpenseId(null);
+    setExpenseDraft({ description: '', amount: '' });
+  };
+
+  const handleRemoveExpense = (expenseId) => {
+    setExpenses((prev) => prev.filter((exp) => exp.id !== expenseId));
+    if (editingExpenseId === expenseId) {
+      setEditingExpenseId(null);
+      setExpenseDraft({ description: '', amount: '' });
+    }
+  };
+
+  const handleAddPayment = async (e) => {
     e.preventDefault();
-    if (!newPayment.reason || !newPayment.amount) return;
-    const payment = {
-      id: Date.now(),
-      reason: newPayment.reason,
-      amount: parseFloat(newPayment.amount),
-      date: new Date().toISOString().split('T')[0]
-    };
-    setPayments([...payments, payment]);
-    setNewPayment({ reason: '', amount: '' });
+    if (!newPayment.amount) return;
+    try {
+      await api.post('/payments', {
+        bookingId: booking.id,
+        amount: Number(newPayment.amount),
+        method: newPayment.method,
+        status: newPayment.status,
+      });
+
+      const paymentsRes = await api.get('/payments');
+      const paymentRows = paymentsRes.data?.data || [];
+      const bookingPayments = paymentRows
+        .filter((pay) => pay.bookingId === booking.id)
+        .map((pay) => ({
+          id: pay.id,
+          amount: Number(pay.amount || 0),
+          method: pay.method || 'cash',
+          status: pay.status || 'paid',
+          date: (pay.paidAt || pay.createdAt || '').toString().slice(0, 10),
+        }));
+
+      setPayments(bookingPayments);
+      setNewPayment({ method: 'cash', status: 'paid', amount: '' });
+    } catch (error) {
+      // keep existing UI state on failure
+    }
+  };
+
+  const refreshPayments = async (bookingId) => {
+    const paymentsRes = await api.get('/payments');
+    const paymentRows = paymentsRes.data?.data || [];
+    const bookingPayments = paymentRows
+      .filter((pay) => pay.bookingId === bookingId)
+      .map((pay) => ({
+        id: pay.id,
+        amount: Number(pay.amount || 0),
+        method: pay.method || 'cash',
+        status: pay.status || 'paid',
+        date: (pay.paidAt || pay.createdAt || '').toString().slice(0, 10),
+      }));
+    setPayments(bookingPayments);
+  };
+
+  const handleRemovePayment = async (paymentId) => {
+    if (!booking || isRemovingPayment) return;
+    try {
+      setIsRemovingPayment(true);
+      await api.delete(`/payments/${paymentId}`);
+      await refreshPayments(booking.id);
+    } catch (error) {
+      // keep existing UI state on failure
+    } finally {
+      setIsRemovingPayment(false);
+    }
+  };
+
+  const handleEditChange = (field) => (event) => {
+    setEditForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const startEditDetails = () => {
+    if (!booking) return;
+    setEditForm({
+      guestName: booking.guestName || '',
+      guestContact: booking.guestPhone || '',
+      guestNic: booking.nicPassport === 'N/A' ? '' : booking.nicPassport || '',
+      country: booking.country || '',
+      address: booking.address || '',
+      checkInDate: booking.startDate || '',
+      checkOutDate: booking.endDate || '',
+      adults: Number(booking.adults || 0),
+      children: Number(booking.children || 0),
+      status: booking.status || 'pending',
+    });
+    setDetailsMessage({ type: '', message: '' });
+    setIsEditingDetails(true);
+  };
+
+  const handleCancelEditDetails = () => {
+    setDetailsMessage({ type: '', message: '' });
+    setIsEditingDetails(false);
+  };
+
+  const handleSaveDetails = async () => {
+    if (!booking) return;
+
+    if (!editForm.guestName || !editForm.guestContact) {
+      setDetailsMessage({ type: 'error', message: 'Guest name and contact are required.' });
+      return;
+    }
+
+    const start = new Date(editForm.checkInDate);
+    const end = new Date(editForm.checkOutDate);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start >= end) {
+      setDetailsMessage({ type: 'error', message: 'Check-out must be after check-in.' });
+      return;
+    }
+
+    const notesValue = [editForm.country?.trim(), editForm.address?.trim()].filter(Boolean).join(' | ');
+
+    try {
+      await api.put(`/bookings/${booking.id}`, {
+        guestName: editForm.guestName,
+        guestContact: editForm.guestContact,
+        guestNic: editForm.guestNic || null,
+        checkInDate: editForm.checkInDate,
+        checkOutDate: editForm.checkOutDate,
+        adults: Number(editForm.adults || 0),
+        children: Number(editForm.children || 0),
+        status: editForm.status,
+        notes: notesValue || null,
+      });
+
+      const updatedAdults = Number(editForm.adults || 0);
+      const updatedChildren = Number(editForm.children || 0);
+
+      setBooking((prev) => ({
+        ...prev,
+        guestName: editForm.guestName,
+        guestPhone: editForm.guestContact,
+        nicPassport: editForm.guestNic || 'N/A',
+        country: editForm.country,
+        address: editForm.address,
+        startDate: editForm.checkInDate,
+        endDate: editForm.checkOutDate,
+        adults: updatedAdults,
+        children: updatedChildren,
+        guestCount: updatedAdults + updatedChildren || 1,
+        status: editForm.status,
+      }));
+
+      setDetailsMessage({ type: 'success', message: 'Booking updated.' });
+      setIsEditingDetails(false);
+    } catch (error) {
+      setDetailsMessage({ type: 'error', message: 'Failed to update booking.' });
+    }
   };
 
   const handleStatusChange = async (nextStatus) => {
@@ -168,8 +354,14 @@ export default function BookingDetails() {
         </div>
         <div className="flex items-center gap-3">
           <select 
-            value={booking.status}
-            onChange={(e) => handleStatusChange(e.target.value)}
+            value={isEditingDetails ? editForm.status : booking.status}
+            onChange={(e) => {
+              if (isEditingDetails) {
+                setEditForm((prev) => ({ ...prev, status: e.target.value }));
+              } else {
+                handleStatusChange(e.target.value);
+              }
+            }}
             className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-xs font-black text-slate-700 outline-none shadow-sm"
           >
             <option value="pending">Mark as Pending</option>
@@ -178,10 +370,38 @@ export default function BookingDetails() {
             <option value="checked-out">Check Out</option>
             <option value="cancelled">Cancel Booking</option>
           </select>
+          {isEditingDetails ? (
+            <>
+              <button
+                onClick={handleSaveDetails}
+                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-lg hover:bg-emerald-700 transition-all"
+              >
+                Save Changes
+              </button>
+              <button
+                onClick={handleCancelEditDetails}
+                className="bg-slate-100 text-slate-700 px-5 py-2.5 rounded-xl text-xs font-black hover:bg-slate-200 transition-all"
+              >
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={startEditDetails}
+              className="bg-white text-slate-700 px-5 py-2.5 rounded-xl text-xs font-black border border-slate-200 hover:border-slate-300 transition-all"
+            >
+              Edit Details
+            </button>
+          )}
           <button className="bg-slate-900 text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-lg hover:bg-blue-600 transition-all">
             Download PDF
           </button>
         </div>
+        {detailsMessage.message && (
+          <p className={`text-[10px] font-black uppercase tracking-widest ${detailsMessage.type === 'error' ? 'text-rose-500' : 'text-emerald-600'}`}>
+            {detailsMessage.message}
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -192,24 +412,60 @@ export default function BookingDetails() {
             <div className="grid md:grid-cols-2 gap-8">
               <div>
                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] mb-4">Guest Profile</p>
-                <h3 className="text-xl font-black text-slate-800">{booking.guestName}</h3>
+                {isEditingDetails ? (
+                  <input
+                    type="text"
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm font-black text-slate-800 outline-none"
+                    value={editForm.guestName}
+                    onChange={handleEditChange('guestName')}
+                  />
+                ) : (
+                  <h3 className="text-xl font-black text-slate-800">{booking.guestName}</h3>
+                )}
                 
                 <div className="mt-5 space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-[8px] font-black text-slate-400 uppercase">Contact No.</p>
-                      <p className="text-xs font-bold text-slate-700">{booking.guestPhone}</p>
+                      {isEditingDetails ? (
+                        <input
+                          type="text"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+                          value={editForm.guestContact}
+                          onChange={handleEditChange('guestContact')}
+                        />
+                      ) : (
+                        <p className="text-xs font-bold text-slate-700">{booking.guestPhone}</p>
+                      )}
                     </div>
                     <div>
                       <p className="text-[8px] font-black text-slate-400 uppercase">NIC / Passport</p>
-                      <p className="text-xs font-bold text-slate-700">{booking.nicPassport || 'N/A'}</p>
+                      {isEditingDetails ? (
+                        <input
+                          type="text"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+                          value={editForm.guestNic}
+                          onChange={handleEditChange('guestNic')}
+                        />
+                      ) : (
+                        <p className="text-xs font-bold text-slate-700">{booking.nicPassport || 'N/A'}</p>
+                      )}
                     </div>
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <p className="text-[8px] font-black text-slate-400 uppercase">Country</p>
-                      <p className="text-xs font-bold text-slate-700">{booking.country || 'N/A'}</p>
+                      {isEditingDetails ? (
+                        <input
+                          type="text"
+                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+                          value={editForm.country}
+                          onChange={handleEditChange('country')}
+                        />
+                      ) : (
+                        <p className="text-xs font-bold text-slate-700">{booking.country || 'N/A'}</p>
+                      )}
                     </div>
                     <div>
                       <p className="text-[8px] font-black text-slate-400 uppercase">Email</p>
@@ -219,18 +475,47 @@ export default function BookingDetails() {
 
                   <div>
                     <p className="text-[8px] font-black text-slate-400 uppercase">Home Address</p>
-                    <p className="text-xs font-bold text-slate-500 leading-relaxed">{booking.address || 'Not provided'}</p>
+                    {isEditingDetails ? (
+                      <textarea
+                        rows="2"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+                        value={editForm.address}
+                        onChange={handleEditChange('address')}
+                      />
+                    ) : (
+                      <p className="text-xs font-bold text-slate-500 leading-relaxed">{booking.address || 'Not provided'}</p>
+                    )}
                   </div>
                 </div>
 
                 <div className="mt-6 flex items-center gap-3">
                   <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
                     <span className="text-[10px] font-black text-slate-400 uppercase">Adults:</span>
-                    <span className="text-sm font-black text-slate-700">{booking.adults || booking.guestCount}</span>
+                    {isEditingDetails ? (
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-16 bg-white border border-slate-100 rounded-lg px-2 py-1 text-sm font-black text-slate-700 outline-none"
+                        value={editForm.adults}
+                        onChange={handleEditChange('adults')}
+                      />
+                    ) : (
+                      <span className="text-sm font-black text-slate-700">{booking.adults || booking.guestCount}</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
                     <span className="text-[10px] font-black text-slate-400 uppercase">Children:</span>
-                    <span className="text-sm font-black text-slate-700">{booking.children || 0}</span>
+                    {isEditingDetails ? (
+                      <input
+                        type="number"
+                        min="0"
+                        className="w-16 bg-white border border-slate-100 rounded-lg px-2 py-1 text-sm font-black text-slate-700 outline-none"
+                        value={editForm.children}
+                        onChange={handleEditChange('children')}
+                      />
+                    ) : (
+                      <span className="text-sm font-black text-slate-700">{booking.children || 0}</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -245,11 +530,29 @@ export default function BookingDetails() {
                   </div>
                   <div>
                     <p className="text-[8px] font-black text-slate-400 uppercase">Check-in Date</p>
-                    <p className="text-sm font-black text-slate-700">{booking.startDate}</p>
+                    {isEditingDetails ? (
+                      <input
+                        type="date"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm font-black text-slate-700 outline-none"
+                        value={editForm.checkInDate}
+                        onChange={handleEditChange('checkInDate')}
+                      />
+                    ) : (
+                      <p className="text-sm font-black text-slate-700">{booking.startDate}</p>
+                    )}
                   </div>
                   <div>
                     <p className="text-[8px] font-black text-slate-400 uppercase">Check-out Date</p>
-                    <p className="text-sm font-black text-slate-700">{booking.endDate}</p>
+                    {isEditingDetails ? (
+                      <input
+                        type="date"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-sm font-black text-slate-700 outline-none"
+                        value={editForm.checkOutDate}
+                        onChange={handleEditChange('checkOutDate')}
+                      />
+                    ) : (
+                      <p className="text-sm font-black text-slate-700">{booking.endDate}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -265,17 +568,70 @@ export default function BookingDetails() {
             
             <div className="space-y-3 mb-8">
               {expenses.map(exp => (
-                <div key={exp.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50/50 border border-slate-50">
-                  <div className="flex items-center gap-4">
-                    <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                <div key={exp.id} className="p-3 rounded-xl bg-slate-50/50 border border-slate-50">
+                  {editingExpenseId === exp.id ? (
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          className="flex-1 bg-white border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+                          value={expenseDraft.description}
+                          onChange={(e) => setExpenseDraft((prev) => ({ ...prev, description: e.target.value }))}
+                        />
+                        <input
+                          type="number"
+                          className="w-24 bg-white border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
+                          value={expenseDraft.amount}
+                          onChange={(e) => setExpenseDraft((prev) => ({ ...prev, amount: e.target.value }))}
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleSaveExpense(exp.id)}
+                          className="bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleCancelEditExpense}
+                          className="bg-white text-slate-500 px-4 py-2 rounded-xl text-[10px] font-black uppercase border border-slate-200"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-black text-slate-700">{exp.description}</p>
-                      <p className="text-[9px] text-slate-400 font-bold uppercase">{exp.date}</p>
+                  ) : (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-slate-700">{exp.description}</p>
+                          <p className="text-[9px] text-slate-400 font-bold uppercase">{exp.date}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <p className="text-sm font-black text-slate-800">Rs. {exp.amount.toFixed(2)}</p>
+                        <button
+                          type="button"
+                          onClick={() => handleStartEditExpense(exp)}
+                          className="text-[9px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-700"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveExpense(exp.id)}
+                          className="text-[9px] font-black uppercase tracking-widest text-rose-400 hover:text-rose-600"
+                        >
+                          Remove
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-sm font-black text-slate-800">Rs. {exp.amount.toFixed(2)}</p>
+                  )}
                 </div>
               ))}
               {expenses.length === 0 && <p className="text-center py-6 text-xs text-slate-400 font-bold italic">No extra charges recorded.</p>}
@@ -311,9 +667,23 @@ export default function BookingDetails() {
             
             <div className="space-y-3 flex-1 mb-6">
               {payments.map(pay => (
-                <div key={pay.id} className="p-3 rounded-xl bg-emerald-50/30 border border-emerald-50 flex items-center justify-between">
+                <div key={pay.id} className="relative p-3 rounded-xl bg-emerald-50/30 border border-emerald-50 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => handleRemovePayment(pay.id)}
+                    disabled={isRemovingPayment}
+                    className="absolute -top-2 -right-2 w-7 h-7 rounded-full border border-emerald-100 bg-white text-emerald-500 shadow-sm flex items-center justify-center hover:border-rose-200 hover:text-rose-600 hover:shadow-md disabled:opacity-60"
+                    aria-label="Remove payment"
+                    title="Remove payment"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                   <div>
-                    <p className="text-[10px] font-black text-emerald-700 leading-tight">{pay.reason}</p>
+                    <p className="text-[10px] font-black text-emerald-700 leading-tight">
+                      {pay.method.toUpperCase()} · {pay.status}
+                    </p>
                     <p className="text-[8px] text-emerald-600/70 font-black uppercase tracking-tighter mt-0.5">{pay.date}</p>
                   </div>
                   <p className="text-xs font-black text-emerald-700 tracking-tighter">+Rs. {pay.amount.toFixed(2)}</p>
@@ -323,20 +693,33 @@ export default function BookingDetails() {
             </div>
 
             <form onSubmit={handleAddPayment} className="space-y-3 pt-6 border-t border-slate-50">
-              <input 
-                type="text" 
-                placeholder="Payment Reason" 
-                className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-bold outline-none"
-                value={newPayment.reason}
-                onChange={e => setNewPayment({...newPayment, reason: e.target.value})}
-              />
+              <div className="grid grid-cols-2 gap-2">
+                <select
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-bold outline-none"
+                  value={newPayment.method}
+                  onChange={e => setNewPayment({ ...newPayment, method: e.target.value })}
+                >
+                  <option value="cash">Cash</option>
+                  <option value="card">Card</option>
+                  <option value="bank">Bank</option>
+                  <option value="online">Online</option>
+                </select>
+                <select
+                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-bold outline-none"
+                  value={newPayment.status}
+                  onChange={e => setNewPayment({ ...newPayment, status: e.target.value })}
+                >
+                  <option value="paid">Paid</option>
+                  <option value="pending">Pending</option>
+                </select>
+              </div>
               <div className="flex gap-2">
                 <input 
                   type="number" 
                   placeholder="Amount" 
                   className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-bold outline-none"
                   value={newPayment.amount}
-                  onChange={e => setNewPayment({...newPayment, amount: e.target.value})}
+                  onChange={e => setNewPayment({ ...newPayment, amount: e.target.value })}
                 />
                 <button className="bg-emerald-600 text-white px-4 py-2.5 rounded-xl text-[10px] font-black uppercase hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-100">
                   Post

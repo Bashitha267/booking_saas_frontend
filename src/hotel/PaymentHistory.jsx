@@ -9,6 +9,7 @@ export default function PaymentHistory() {
   const [toDate, setToDate] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
   const [payments, setPayments] = useState([]);
+  const [bookingsById, setBookingsById] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const itemsPerPage = 8;
@@ -19,14 +20,28 @@ export default function PaymentHistory() {
       setIsLoading(true);
       setLoadError('');
       try {
-        const res = await api.get('/payments');
-        if (isMounted) {
-          setPayments(res.data?.data || []);
-        }
-      } catch (error) {
-        if (isMounted) {
+        const [paymentsRes, bookingsRes] = await Promise.allSettled([
+          api.get('/payments'),
+          api.get('/bookings'),
+        ]);
+
+        if (paymentsRes.status === 'fulfilled') {
+          if (isMounted) {
+            setPayments(paymentsRes.value.data?.data || []);
+          }
+        } else if (isMounted) {
+          const message = paymentsRes.reason?.response?.data?.message || paymentsRes.reason?.message;
           setPayments([]);
-          setLoadError('Failed to load payments.');
+          setLoadError(message || 'Failed to load payments.');
+        }
+
+        if (bookingsRes.status === 'fulfilled' && isMounted) {
+          const bookingRows = bookingsRes.value.data?.data || [];
+          const map = bookingRows.reduce((acc, booking) => {
+            acc[booking.id] = booking;
+            return acc;
+          }, {});
+          setBookingsById(map);
         }
       } finally {
         if (isMounted) setIsLoading(false);
@@ -48,27 +63,31 @@ export default function PaymentHistory() {
 
   const normalizedPayments = useMemo(() => {
     return payments.map((pay) => {
+      const booking = bookingsById[pay.bookingId] || {};
       const paidDate = pay.paidAt || pay.createdAt || '';
+      const parsedDate = paidDate ? new Date(paidDate) : null;
+      const dateValue = parsedDate && !Number.isNaN(parsedDate.getTime()) ? parsedDate : null;
       return {
         id: pay.id,
         bookingId: pay.bookingId,
-        guestName: pay.guestName || 'Guest',
-        contact: '-',
+        guestName: pay.guestName || booking.guestName || 'Guest',
+        contact: booking.guestContact || '-',
         amount: Number(pay.amount || 0),
-        date: paidDate ? paidDate.toString().slice(0, 10) : '',
+        dateValue,
+        dateLabel: dateValue ? dateValue.toISOString().slice(0, 10) : '',
         reason: pay.status || 'Payment',
         method: pay.method ? pay.method.toUpperCase() : 'CASH',
       };
     });
-  }, [payments]);
+  }, [payments, bookingsById]);
 
   const filteredPayments = useMemo(() => {
     return normalizedPayments.filter(pay => {
       const matchesSearch = pay.guestName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             pay.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                            pay.bookingId.toString().includes(searchTerm);
+                            String(pay.bookingId || '').includes(searchTerm);
       
-      const payDate = pay.date ? new Date(pay.date) : null;
+      const payDate = pay.dateValue || null;
       const start = fromDate ? new Date(fromDate) : null;
       const end = toDate ? new Date(toDate) : null;
 
@@ -181,8 +200,12 @@ export default function PaymentHistory() {
               {paginatedPayments.map(pay => (
                 <tr key={pay.id} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="p-5">
-                    <p className="text-xs font-black text-slate-700">{new Date(pay.date).toLocaleDateString('default', { day: 'numeric', month: 'short' })}</p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">{new Date(pay.date).getFullYear()}</p>
+                    <p className="text-xs font-black text-slate-700">
+                      {pay.dateValue ? pay.dateValue.toLocaleDateString('default', { day: 'numeric', month: 'short' }) : '-'}
+                    </p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">
+                      {pay.dateValue ? pay.dateValue.getFullYear() : '--'}
+                    </p>
                   </td>
                   <td className="p-5">
                     <p className="text-xs font-black text-slate-800 group-hover:text-blue-600 transition-colors">{pay.guestName}</p>

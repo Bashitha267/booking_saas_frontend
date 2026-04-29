@@ -38,6 +38,9 @@ export default function Dashboard() {
     children: 0,
     roomType: '',
     roomIds: [],
+    paymentStatus: 'none',
+    paymentMethod: 'cash',
+    paymentAmount: '',
   });
   const today = new Date();
 
@@ -332,6 +335,13 @@ export default function Dashboard() {
       return;
     }
 
+    const paymentEnabled = bookingForm.paymentStatus !== 'none';
+    const paymentAmountValue = Number(bookingForm.paymentAmount || 0);
+    if (paymentEnabled && paymentAmountValue <= 0) {
+      setSubmitStatus({ type: 'error', message: 'Enter a valid payment amount.' });
+      return;
+    }
+
     try {
       setSubmitStatus({ type: 'loading', message: 'Saving booking...' });
       const payloadBase = {
@@ -346,11 +356,28 @@ export default function Dashboard() {
         notes: [bookingForm.country, bookingForm.address].filter(Boolean).join(' | ') || null,
       };
 
-      await Promise.all(
+      const bookingResponses = await Promise.all(
         bookingForm.roomIds.map((roomId) =>
           api.post('/bookings', { ...payloadBase, roomId })
         )
       );
+
+      const createdBookingIds = bookingResponses
+        .map((res) => res.data?.id)
+        .filter(Boolean);
+
+      if (paymentEnabled && createdBookingIds.length) {
+        await Promise.all(
+          createdBookingIds.map((bookingId) =>
+            api.post('/payments', {
+              bookingId,
+              amount: paymentAmountValue,
+              method: bookingForm.paymentMethod,
+              status: bookingForm.paymentStatus,
+            })
+          )
+        );
+      }
 
       setSubmitStatus({ type: 'success', message: 'Booking saved.' });
       setShowAddBooking(false);
@@ -365,6 +392,9 @@ export default function Dashboard() {
         children: 0,
         roomType: '',
         roomIds: [],
+        paymentStatus: 'none',
+        paymentMethod: 'cash',
+        paymentAmount: '',
       });
       await fetchBookingData();
     } catch (error) {
@@ -516,6 +546,47 @@ export default function Dashboard() {
                     value={bookingForm.address}
                     onChange={handleBookingChange('address')}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Payment Status</label>
+                  <select
+                    value={bookingForm.paymentStatus}
+                    onChange={handleBookingChange('paymentStatus')}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                  >
+                    <option value="none">No payment now</option>
+                    <option value="paid">Paid</option>
+                    <option value="pending">Pending</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Payment Method</label>
+                  <select
+                    value={bookingForm.paymentMethod}
+                    onChange={handleBookingChange('paymentMethod')}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                    disabled={bookingForm.paymentStatus === 'none'}
+                  >
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="bank">Bank</option>
+                    <option value="online">Online</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Amount (per room)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={bookingForm.paymentAmount}
+                    onChange={handleBookingChange('paymentAmount')}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                    disabled={bookingForm.paymentStatus === 'none'}
                   />
                 </div>
               </div>

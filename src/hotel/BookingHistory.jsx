@@ -18,13 +18,18 @@ export default function BookingHistory() {
       setIsLoading(true);
       setLoadError('');
       try {
-        const [bookingsRes, paymentsRes] = await Promise.all([
+        const [bookingsRes, paymentsRes] = await Promise.allSettled([
           api.get('/bookings'),
           api.get('/payments'),
         ]);
 
-        const bookingRows = bookingsRes.data?.data || [];
-        const paymentRows = paymentsRes.data?.data || [];
+        if (bookingsRes.status !== 'fulfilled') {
+          throw bookingsRes.reason;
+        }
+
+        const bookingRows = bookingsRes.value.data?.data || [];
+        const paymentRows =
+          paymentsRes.status === 'fulfilled' ? paymentsRes.value.data?.data || [] : [];
 
         const paymentsMap = paymentRows.reduce((acc, pay) => {
           const bookingId = pay.bookingId;
@@ -87,7 +92,7 @@ export default function BookingHistory() {
       
       return matchesSearch && matchesStatus && matchesPayment;
     });
-  }, [searchTerm, statusFilter, paymentFilter]);
+  }, [normalizedBookings, searchTerm, statusFilter, paymentFilter]);
 
   const getStatusColor = (status) => {
     switch (status) {
