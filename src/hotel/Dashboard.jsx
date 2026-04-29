@@ -314,6 +314,42 @@ export default function Dashboard() {
     return Array.from(grouped.values());
   }, [rooms, bookings]);
 
+  const roomMap = useMemo(() => {
+    const map = {};
+    rooms.forEach((r) => {
+      map[r.id] = r.roomNumber;
+    });
+    return map;
+  }, [rooms]);
+
+  const bookingRowMap = useMemo(() => {
+    const sorted = [...bookings]
+      .filter((b) => b.status !== 'cancelled')
+      .sort((a, b) => new Date(a.checkInDate) - new Date(b.checkInDate));
+    const rows = [];
+    const map = {};
+    sorted.forEach((b) => {
+      const start = new Date(b.checkInDate);
+      start.setHours(0, 0, 0, 0);
+      let assignedRow = -1;
+      for (let i = 0; i < rows.length; i++) {
+        const rowEnd = new Date(rows[i]);
+        rowEnd.setHours(0, 0, 0, 0);
+        if (start > rowEnd) {
+          assignedRow = i;
+          rows[i] = new Date(b.checkOutDate);
+          break;
+        }
+      }
+      if (assignedRow === -1) {
+        assignedRow = rows.length;
+        rows.push(new Date(b.checkOutDate));
+      }
+      map[b.id] = assignedRow;
+    });
+    return map;
+  }, [bookings]);
+
   const handleBookingChange = (field) => (event) => {
     const value = event.target.value;
     setBookingForm((prev) => ({ ...prev, [field]: value }));
@@ -830,18 +866,26 @@ export default function Dashboard() {
                       <div className="absolute top-2 right-2"><span className="text-[8px] font-black text-blue-600 tracking-widest uppercase bg-blue-50 px-1.5 py-0.5 rounded-md">Today</span></div>
                     </div>
                   )}
-                  <div className="mt-2 space-y-1">
+                  <div className="mt-2 relative">
                     {bookings.map(b => {
                       const isStart = new Date(b.checkInDate).toDateString() === cell.date.toDateString();
                       if (isStart) {
+                        const rowIndex = bookingRowMap[b.id] || 0;
+                        const roomNumber = roomMap[b.roomId] || '';
                         return (
                           <div 
                             key={b.id} 
-                            onClick={() => navigate(`/hotel/bookings/${b.id}`)} 
-                            className={`absolute left-2 h-7 rounded-lg px-3 flex items-center text-[9px] font-black z-20 shadow-md cursor-pointer whitespace-nowrap overflow-hidden ${b.status === 'confirmed' ? 'bg-emerald-500 text-white' : b.status === 'pending' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'}`} 
-                            style={{ width: `calc(${Math.min(7 - (idx % 7), (new Date(b.checkOutDate) - new Date(b.checkInDate)) / 86400000 + 1)} * 100% - 16px)` }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/hotel/bookings/${b.id}`);
+                            }} 
+                            className={`absolute left-2 h-7 rounded-lg px-3 flex items-center text-[9px] font-black z-20 shadow-md cursor-pointer whitespace-nowrap overflow-hidden transition-transform hover:scale-[1.02] ${b.status === 'confirmed' ? 'bg-emerald-500 text-white' : b.status === 'pending' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'}`} 
+                            style={{ 
+                              width: `calc(${Math.min(7 - (idx % 7), (new Date(b.checkOutDate) - new Date(b.checkInDate)) / 86400000 + 1)} * 100% - 16px)`,
+                              top: `${rowIndex * 32}px`
+                            }}
                           >
-                            {b.guestName}
+                            <span className="truncate">{b.guestName} {roomNumber && `· Room ${roomNumber}`}</span>
                           </div>
                         );
                       }
