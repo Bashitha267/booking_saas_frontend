@@ -1,0 +1,7 @@
+export { default as AdminLayout } from './AdminLayout'
+export { default as AdminDashboard } from './Dashboard'
+export { default as AdminUsers } from './Users'
+export { default as AdminPayments } from './Payments'
+export { default as AdminReports } from './Reports'
+export { default as AdminMore } from './More'
+export { default as AdminAccount } from './AdminAccount'

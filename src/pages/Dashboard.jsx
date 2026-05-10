@@ -7,8 +7,7 @@ export default function Dashboard(){
   if(!user) return <Navigate to="/login" replace />
 
   if (user.role === 'admin') {
-    // Redirect to admin portal when implemented, for now hotel
-    return <Navigate to="/hotel" replace />
+    return <Navigate to="/admin" replace />
   }
 
   if (user.role === 'owner' || user.role === 'staff') {

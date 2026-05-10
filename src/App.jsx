@@ -3,6 +3,15 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './Login'
 import Register from './Register'
 import Dashboard from './pages/Dashboard'
+import {
+  AdminLayout,
+  AdminDashboard,
+  AdminUsers,
+  AdminPayments,
+  AdminReports,
+  AdminMore,
+  AdminAccount,
+} from './admin/AdminIndex'
 import { useAuth } from './auth/useAuth'
 
 import HotelLayout from './hotel/HotelLayout'
@@ -44,6 +53,14 @@ export default function App() {
         <Route path="account" element={<RequireRole allowed={['owner', 'admin']}><Account /></RequireRole>} />
       </Route>
 
+      <Route path="/admin" element={<RequireRole allowed={['admin']}><AdminLayout /></RequireRole>}>
+        <Route index element={<AdminDashboard />} />
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="payments" element={<AdminPayments />} />
+        <Route path="reports" element={<AdminReports />} />
+        <Route path="more" element={<AdminMore />} />
+        <Route path="account" element={<AdminAccount />} />
+      </Route>
       <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
       <Route path="/" element={<Navigate to="/hotel" replace />} />
     </Routes>

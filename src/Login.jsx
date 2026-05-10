@@ -2,16 +2,26 @@ import React, { useState, useEffect } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from './auth/useAuth'
 
+function getHomePath(user) {
+  if (!user) return '/login'
+  if (user.role === 'admin') return '/admin'
+  if (user.role === 'owner' || user.role === 'staff') return '/hotel'
+  return '/dashboard'
+}
+
 export default function Login() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const auth = useAuth()
+  const { user, login } = useAuth()
   const navigate = useNavigate()
 
   useEffect(() => { document.title = 'Login — Villax' }, [])
-  useEffect(() => { if (auth?.user) navigate('/dashboard', { replace: true }) }, [auth, navigate])
+  useEffect(() => {
+    if (!user) return
+    navigate(getHomePath(user), { replace: true })
+  }, [user, navigate])
   useEffect(() => { if (!error) return; const t = setTimeout(() => setError(null), 4000); return () => clearTimeout(t) }, [error])
 
   async function handleSubmit(e) {
@@ -19,8 +29,8 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      await auth.login(username, password)
-      navigate('/dashboard')
+      const data = await login(username, password)
+      navigate(getHomePath(data?.user))
     } catch (err) {
       setError(err.response?.data?.message || 'Invalid username or password')
     } finally { setLoading(false) }
