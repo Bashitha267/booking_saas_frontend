@@ -48,52 +48,72 @@ export default function AdminReports() {
   const maxPaid = Math.max(...grouped.map((m) => m.paid), 1)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="admin-hero-card">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Reports</p>
-          <h1 className="mt-2 text-2xl font-semibold text-slate-900 md:text-3xl">Growth Analytics</h1>
-          <p className="mt-2 max-w-2xl text-sm text-slate-600">
-            Monthly owner and payment growth based on billing records.
-          </p>
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-600">Performance</p>
+          <h1 className="mt-3 text-3xl font-extrabold text-slate-900 tracking-tight">Growth Analytics</h1>
         </div>
-        <div className="mt-6 flex flex-wrap items-center gap-2">
-          <input
-            value={year}
-            onChange={(e) => setYear(e.target.value)}
-            className="admin-input"
-            placeholder="Year"
-          />
+      </div>
+
+      <div className="admin-filter-bar">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="admin-filter-group w-32">
+            <label className="admin-filter-label">Report Year</label>
+            <input
+              value={year}
+              onChange={(e) => setYear(e.target.value)}
+              className="admin-filter-input text-center font-bold"
+              placeholder="YYYY"
+            />
+          </div>
         </div>
       </div>
 
       {error && <div className="admin-alert">{error}</div>}
 
       <div className="admin-card">
-        <h2 className="text-lg font-semibold">Monthly Paid Amount</h2>
-        <div className="mt-6 grid grid-cols-12 gap-2 items-end">
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-lg font-bold text-slate-900">Monthly Revenue Pulse</h2>
+          <div className="flex items-center gap-4">
+             <div className="flex items-center gap-1.5">
+                <div className="h-2 w-2 rounded-full bg-blue-600" />
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Paid Settlements</span>
+             </div>
+          </div>
+        </div>
+        
+        <div className="mt-6 flex items-end gap-2 sm:gap-4 h-48">
           {grouped.map((month, index) => {
-            const height = Math.max((month.paid / maxPaid) * 140, 6)
+            const height = Math.max((month.paid / maxPaid) * 100, 4)
             return (
-              <div key={monthLabel(index)} className="flex flex-col items-center gap-2">
-                <div
-                  className="w-full rounded-full bg-gradient-to-t from-cyan-500 to-blue-600"
-                  style={{ height }}
-                  title={`${formatMoney(month.paid)}`}
-                />
-                <span className="text-xs text-slate-500">{monthLabel(index)}</span>
+              <div key={monthLabel(index)} className="flex-1 flex flex-col items-center gap-3 h-full">
+                <div className="flex-1 w-full flex items-end">
+                   <div
+                     className="w-full rounded-t-lg bg-blue-600/10 hover:bg-blue-600 transition-all duration-300 relative group cursor-help"
+                     style={{ height: `${height}%` }}
+                   >
+                      <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-2 py-1 rounded text-[10px] font-bold opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none shadow-xl">
+                        {formatMoney(month.paid)}
+                      </div>
+                   </div>
+                </div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">{monthLabel(index)}</span>
               </div>
             )
           })}
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {grouped.map((month, index) => (
-          <div key={monthLabel(index)} className="admin-metric">
-            <p>{monthLabel(index)}</p>
-            <h3>{formatMoney(month.paid)}</h3>
-            <span className="text-xs text-slate-500">Owners billed: {month.count}</span>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {grouped.filter(m => m.count > 0 || m.paid > 0).map((month, index) => (
+          <div key={index} className="admin-card !p-5">
+            <p className="text-[10px] font-bold text-slate-400 uppercase mb-1">{monthLabel(index)} Summary</p>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">{formatMoney(month.paid)}</h3>
+            <div className="flex items-center justify-between pt-2 border-t border-slate-50">
+               <span className="text-xs font-medium text-slate-500">{month.count} Billings</span>
+               <span className="text-[10px] font-bold text-blue-600">Details</span>
+            </div>
           </div>
         ))}
       </div>

@@ -46,33 +46,61 @@ export default function AdminAccount() {
   }
 
   return (
-    <div className="admin-card">
-      <h2 className="text-lg font-semibold">Add Admin</h2>
-      <p className="mt-2 text-sm text-slate-600">Create new admin access for the platform.</p>
+    <div className="admin-card !p-6">
+      <div className="mb-6">
+        <h2 className="text-sm font-bold text-slate-900 uppercase tracking-tight">Add Administrator</h2>
+      </div>
 
-      <form onSubmit={handleSubmit} className="mt-6 grid gap-3 md:grid-cols-2">
-        <input className="admin-input" value={form.firstName} onChange={handleChange('firstName')} placeholder="First name" required />
-        <input className="admin-input" value={form.lastName} onChange={handleChange('lastName')} placeholder="Last name" required />
-        <input className="admin-input" value={form.username} onChange={handleChange('username')} placeholder="Username" required />
-        <input className="admin-input" value={form.nicNumber} onChange={handleChange('nicNumber')} placeholder="NIC number" />
-        <input className="admin-input" value={form.contact} onChange={handleChange('contact')} placeholder="Contact" required />
-        <input className="admin-input" value={form.whatsapp} onChange={handleChange('whatsapp')} placeholder="WhatsApp" required />
-        <input className="admin-input md:col-span-2" value={form.address} onChange={handleChange('address')} placeholder="Address" required />
-        <input
-          className="admin-input"
-          value={form.password}
-          onChange={handleChange('password')}
-          placeholder="Password"
-          type="password"
-          required
-        />
-        <button className="admin-button-primary md:col-span-2" type="submit" disabled={loading}>
-          {loading ? 'Creating...' : 'Create admin'}
+      <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">First Name</label>
+          <input className="admin-input" value={form.firstName} onChange={handleChange('firstName')} placeholder="John" required />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Last Name</label>
+          <input className="admin-input" value={form.lastName} onChange={handleChange('lastName')} placeholder="Doe" required />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Username</label>
+          <input className="admin-input" value={form.username} onChange={handleChange('username')} placeholder="johndoe" required />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">NIC Number</label>
+          <input className="admin-input" value={form.nicNumber} onChange={handleChange('nicNumber')} placeholder="199XXXXXXXXX" />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Contact Number</label>
+          <input className="admin-input" value={form.contact} onChange={handleChange('contact')} placeholder="+94 7X XXX XXXX" required />
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">WhatsApp</label>
+          <input className="admin-input" value={form.whatsapp} onChange={handleChange('whatsapp')} placeholder="+94 7X XXX XXXX" required />
+        </div>
+        <div className="space-y-1.5 md:col-span-2">
+          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Physical Address</label>
+          <input className="admin-input" value={form.address} onChange={handleChange('address')} placeholder="123, Main Street, Colombo" required />
+        </div>
+        <div className="space-y-1.5 md:col-span-2">
+          <label className="text-[10px] font-bold text-slate-400 uppercase ml-1">Security Password</label>
+          <input
+            className="admin-input"
+            value={form.password}
+            onChange={handleChange('password')}
+            placeholder="••••••••"
+            type="password"
+            required
+          />
+        </div>
+        <button className="admin-button-primary md:col-span-2 mt-4" type="submit" disabled={loading}>
+          {loading ? 'Processing...' : 'Register Administrator'}
         </button>
       </form>
 
-      {message && <p className="mt-3 text-sm text-emerald-600">{message}</p>}
-      {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
+      {(message || error) && (
+        <div className={`mt-6 p-4 rounded-xl text-sm font-bold ${message ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+          {message || error}
+        </div>
+      )}
     </div>
   )
 }

@@ -25,97 +25,159 @@
   }
 
   .admin-shell {
-    font-family: 'Space Grotesk', 'Inter', sans-serif;
-    background: radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 45%),
-      radial-gradient(circle at 30% 20%, rgba(99, 102, 241, 0.12), transparent 50%),
-      linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background-color: #ffffff;
     color: #0f172a;
+    scroll-behavior: smooth;
   }
 
   .admin-bg {
     @apply absolute inset-0;
-    background: radial-gradient(circle at 80% 20%, rgba(14, 165, 233, 0.14), transparent 45%),
-      radial-gradient(circle at 10% 80%, rgba(59, 130, 246, 0.12), transparent 50%);
+    background: radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.03), transparent 40%),
+                radial-gradient(circle at 100% 100%, rgba(99, 102, 241, 0.03), transparent 40%);
     pointer-events: none;
   }
 
   .admin-card {
-    @apply rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-xl shadow-slate-200/60;
+    @apply rounded-2xl border border-slate-100 bg-white p-6 text-slate-900 shadow-sm transition-all duration-200;
   }
 
-  .admin-hero-card {
-    @apply admin-card;
-    background: linear-gradient(135deg, #ffffff, #f3f6fb);
+  .admin-card:hover {
+    @apply shadow-md border-slate-200;
   }
 
   .admin-metric {
-    @apply admin-card flex flex-col gap-2;
+    @apply rounded-xl border border-slate-100 bg-white p-4 shadow-sm;
+  }
+
+  .admin-metric p {
+    @apply text-[9px] font-bold uppercase tracking-wider text-slate-400;
+  }
+
+  .admin-metric h3 {
+    @apply mt-1 text-xl font-extrabold text-slate-900 tracking-tight;
+  }
+
+  .admin-hero-card {
+    @apply rounded-xl border border-slate-100 bg-white p-6 shadow-sm;
   }
 
   .admin-input {
-    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none;
+    @apply h-9 w-full rounded-lg border border-slate-100 bg-slate-50 px-3 text-[12px] font-medium text-slate-700 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/5 placeholder:text-slate-400;
   }
 
   .admin-button-primary {
-    @apply inline-flex items-center justify-center rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-cyan-500/30 transition hover:from-cyan-400 hover:to-blue-500 disabled:opacity-60;
+    @apply flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-[11px] font-bold text-white shadow-md shadow-blue-100 transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50;
   }
 
   .admin-button-secondary {
-    @apply inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-300;
+    @apply flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-[11px] font-bold text-slate-600 transition-all hover:bg-slate-50 active:scale-95;
   }
 
   .admin-button-ghost {
-    @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-900;
+    @apply flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-[11px] font-bold text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-600;
   }
 
   .admin-pill {
-    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold capitalize;
-    background: rgba(15, 23, 42, 0.06);
-    color: #334155;
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-tight bg-[#f1f5f9] text-[#475569];
   }
 
   .admin-pill.paid,
   .admin-pill.active,
   .admin-pill.approved {
-    background: rgba(16, 185, 129, 0.2);
-    color: #a7f3d0;
+    @apply bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/10;
   }
 
   .admin-pill.pending,
   .admin-pill.partial {
-    background: rgba(249, 115, 22, 0.2);
-    color: #fdba74;
+    @apply bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-600/10;
   }
 
   .admin-pill.overdue,
   .admin-pill.blocked,
   .admin-pill.rejected {
-    background: rgba(239, 68, 68, 0.2);
-    color: #fecaca;
+    @apply bg-rose-50 text-rose-700 ring-1 ring-inset ring-rose-600/10;
   }
 
   .admin-alert {
-    @apply rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700;
+    @apply rounded-xl border border-rose-100 bg-rose-50/50 p-4 text-sm font-medium text-rose-800;
   }
 
   .admin-modal-backdrop {
-    @apply fixed inset-0 z-30 flex items-center justify-center bg-slate-900/20 p-4 backdrop-blur;
+    @apply fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm transition-all;
   }
 
   .admin-modal {
-    @apply max-h-[85vh] w-full max-w-5xl overflow-auto rounded-3xl border border-slate-200 bg-white p-6 text-slate-900 shadow-2xl shadow-slate-200/50;
+    @apply max-h-[90vh] w-full max-w-5xl overflow-auto rounded-3xl bg-white p-8 text-slate-900 shadow-2xl;
   }
 
   .admin-tab {
-    @apply rounded-full border border-slate-200 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-500 transition;
+    @apply rounded-xl border border-slate-200 px-5 py-2 text-xs font-bold uppercase tracking-wider text-slate-500 transition-all hover:bg-slate-50;
   }
 
   .admin-tab.active {
-    @apply border-primary-400 text-slate-900 shadow-lg shadow-primary-200/60;
+    @apply border-blue-600 bg-blue-50/50 text-blue-700;
+  }
+
+  .admin-bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 z-50 border-t border-slate-100 bg-white/80 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden;
+  }
+
+  .admin-content {
+    @apply pb-32 pt-6 lg:pb-10;
   }
 
   .admin-fade {
-    animation: admin-fade-in 0.35s ease-out;
+    animation: admin-fade-in 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Filter Bar Design */
+  .admin-filter-bar {
+    @apply rounded-xl border border-blue-100 bg-blue-50/50 p-4 shadow-sm backdrop-blur-md;
+  }
+
+  .admin-filter-group {
+    @apply flex flex-col gap-1;
+  }
+
+  .admin-filter-label {
+    @apply text-[9px] font-bold uppercase tracking-wider text-slate-400 ml-0.5;
+  }
+
+  .admin-filter-input {
+    @apply h-9 rounded-lg border border-blue-100 bg-white px-3 text-[12px] font-medium text-slate-700 transition-all focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none placeholder:text-slate-400;
+  }
+
+  .admin-filter-btn-reset {
+    @apply flex h-9 w-9 items-center justify-center rounded-lg border border-blue-100 bg-white text-slate-400 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-95;
+  }
+
+  /* Compact Table & Text */
+  .admin-table {
+    @apply w-full border-separate border-spacing-0;
+  }
+
+  .admin-table th {
+    @apply border-b border-slate-100 bg-slate-50/50 px-3 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400;
+  }
+
+  .admin-table td {
+    @apply border-b border-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600;
+  }
+
+  .admin-table-row {
+    @apply transition-colors hover:bg-slate-50/20;
+  }
+}
+
+@keyframes admin-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
