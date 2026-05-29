@@ -21,6 +21,7 @@ export default function Register() {
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [showTerms, setShowTerms] = useState(false)
   const auth = useAuth()
   const navigate = useNavigate()
 
@@ -325,7 +326,7 @@ export default function Register() {
                 className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-slate-300 rounded cursor-pointer"
               />
               <label htmlFor="terms" className="ml-2 block text-sm text-slate-700 cursor-pointer">
-                I agree to the <a href="#" className="font-medium text-primary-600 hover:text-primary-500">Terms of Service</a> and <a href="#" className="font-medium text-primary-600 hover:text-primary-500">Privacy Policy</a>
+                I agree to the <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTerms(true); }} className="font-medium text-primary-600 hover:text-primary-500">Terms of Service</a> and <a href="#" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowTerms(true); }} className="font-medium text-primary-600 hover:text-primary-500">Privacy Policy</a>
               </label>
             </div>
 
@@ -382,6 +383,39 @@ export default function Register() {
           </div>
         </div>
       </div>
+
+      {showTerms && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          onClick={() => setShowTerms(false)}
+        >
+          <div 
+            className="relative bg-white rounded-2xl p-6 shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-slate-900">Terms & Conditions</h3>
+              <button 
+                type="button"
+                onClick={() => setShowTerms(false)}
+                className="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-100 transition-colors"
+                aria-label="Close"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-auto max-h-[70vh] rounded-lg border border-slate-100">
+              <img 
+                src="/terms_conditions.png" 
+                alt="Terms of Service & Privacy Policy" 
+                className="w-full h-auto object-contain"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

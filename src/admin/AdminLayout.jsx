@@ -67,8 +67,8 @@ export default function AdminLayout() {
               </svg>
             </div>
             <div>
-              <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-blue-400">Villax</p>
-              <h1 className="text-sm font-black text-white">Admin</h1>
+              <p className="text-xs font-bold uppercase tracking-[0.2em] text-blue-400">Villax</p>
+              <h1 className="text-base font-black text-white">Admin</h1>
             </div>
           </div>
         </div>
@@ -80,7 +80,7 @@ export default function AdminLayout() {
               to={item.path}
               end={item.path === '/admin'}
               className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-lg px-3 py-2 text-[11px] font-bold transition-all ${
+                `group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-bold transition-all ${
                   isActive
                     ? 'bg-blue-600 text-white shadow-lg shadow-blue-700/20'
                     : 'text-blue-200 hover:bg-blue-800 hover:text-white'
@@ -95,17 +95,17 @@ export default function AdminLayout() {
 
         <div className="border-t border-blue-800 p-4">
           <div className="flex items-center gap-3 px-2">
-            <div className="h-8 w-8 rounded-full bg-blue-800 flex items-center justify-center text-blue-200 text-[10px] font-bold ring-2 ring-blue-700">
+            <div className="h-8 w-8 rounded-full bg-blue-800 flex items-center justify-center text-blue-200 text-[13px] font-bold ring-2 ring-blue-700">
               {user?.username?.substring(0, 2).toUpperCase() || 'AD'}
             </div>
             <div className="overflow-hidden">
-              <p className="truncate text-[11px] font-bold text-white">{user?.username || 'Admin'}</p>
-              <p className="truncate text-[9px] font-medium text-blue-400">{user?.email || 'admin@villax.com'}</p>
+              <p className="truncate text-sm font-bold text-white">{user?.username || 'Admin'}</p>
+              <p className="truncate text-xs font-medium text-blue-400">{user?.email || 'admin@villax.com'}</p>
             </div>
           </div>
           <button
             onClick={handleLogout}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-blue-800 bg-blue-800/50 py-1.5 text-[10px] font-bold text-blue-200 transition-all hover:bg-blue-800 hover:text-white"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-blue-800 bg-blue-800/50 py-1.5 text-[13px] font-bold text-blue-200 transition-all hover:bg-blue-800 hover:text-white"
           >
             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -125,17 +125,15 @@ export default function AdminLayout() {
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" strokeLinecap="round" strokeLinejoin="round"/>
                </svg>
             </div>
-            <h1 className="text-sm font-bold text-slate-900 tracking-tight">Admin Console</h1>
+            <h1 className="text-base font-bold text-slate-900 tracking-tight">Admin Console</h1>
           </div>
-          <div className="h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center text-[10px] font-bold text-slate-500">
+          <div className="h-7 w-7 rounded-full bg-slate-100 flex items-center justify-center text-[13px] font-bold text-slate-500">
              {user?.username?.substring(0, 1).toUpperCase() || 'A'}
           </div>
         </header>
 
         <div className="mx-auto max-w-7xl px-4 py-4 lg:px-8 lg:py-8">
-          <div key={location.pathname} className="admin-fade">
-            <Outlet />
-          </div>
+          <Outlet />
         </div>
       </main>
 
@@ -154,7 +152,7 @@ export default function AdminLayout() {
               }
             >
               <Icon name={item.icon} />
-              <span className="text-[8px] font-bold uppercase tracking-tight">{item.label}</span>
+              <span className="text-[11px] font-bold uppercase tracking-tight">{item.label}</span>
             </NavLink>
           ))}
         </div>

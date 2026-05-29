@@ -2,6 +2,31 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useAuth from '../auth/useAuth';
 import api from '../api';
+import { useToast } from '../components/Toast';
+
+function formatMoney(value) {
+  const number = Number(value || 0)
+  return 'LKR ' + number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+function formatLocalDate(date) {
+  const d = new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function getMonthsCovered(form) {
+  if (form.billingCycle === 'yearly') return 12;
+  if (!form.periodStart) return 1;
+  if (!form.periodEnd) return 1;
+  const [sy, sm] = form.periodStart.split('-').map(Number);
+  const [ey, em] = form.periodEnd.split('-').map(Number);
+  if (!sy || !sm || !ey || !em) return 1;
+  const diff = (ey - sy) * 12 + (em - sm);
+  return diff >= 0 ? diff + 1 : 1;
+}
 
 const statMeta = [
   { label: 'Total Bookings', color: 'text-blue-600', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
@@ -13,6 +38,7 @@ const statMeta = [
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user, logout, updateUser } = useAuth();
+  const { showToast, ToastComponent } = useToast();
   const [viewDate, setViewDate] = useState(new Date());
   const [viewType, setViewType] = useState('calendar'); // 'calendar' or 'timeline'
   const [showQuickAvailability, setShowQuickAvailability] = useState(false);
@@ -25,7 +51,7 @@ export default function Dashboard() {
   const [payments, setPayments] = useState([]);
   const [properties, setProperties] = useState([]);
   const [isLoadingProperties, setIsLoadingProperties] = useState(false);
-  const [activePropertyId, setActivePropertyId] = useState(user?.currentPropertyId || user?.propertyId || '');
+  const [activePropertyId, setActivePropertyId] = useState('all');
   const [submitStatus, setSubmitStatus] = useState({ type: '', message: '' });
   const [bookingForm, setBookingForm] = useState({
     guestName: '',
@@ -42,6 +68,20 @@ export default function Dashboard() {
     paymentMethod: 'cash',
     paymentAmount: '',
   });
+  const [systemStatus, setSystemStatus] = useState({ globalFee: 0, latestBilling: null });
+  const [systemPayments, setSystemPayments] = useState([]);
+  const [showSystemPayment, setShowSystemPayment] = useState(false);
+  const [systemPaymentForm, setSystemPaymentForm] = useState({ 
+    billingCycle: 'monthly', 
+    periodStart: new Date().toISOString().slice(0, 7),
+    periodEnd: '',
+    amount: '', 
+    method: 'bank', 
+    note: '', 
+    proofUrl: '' 
+  });
+  const [isSubmittingSystemPayment, setIsSubmittingSystemPayment] = useState(false);
+
   const today = new Date();
 
   const handleLogout = async () => {
@@ -53,8 +93,18 @@ export default function Dashboard() {
   const isOwner = user?.role === 'owner';
   const isStaff = user?.role === 'staff';
 
-  const totalBookings = bookings.length;
-  const revenueTotal = payments.reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+  const currentMonthBookings = bookings.filter(b => {
+    const d = new Date(b.checkInDate);
+    return d.getMonth() === viewDate.getMonth() && d.getFullYear() === viewDate.getFullYear();
+  });
+
+  const revenueTotal = payments.filter(p => {
+    const d = new Date(p.createdAt);
+    return d.getMonth() === viewDate.getMonth() && d.getFullYear() === viewDate.getFullYear();
+  }).reduce((sum, pay) => sum + Number(pay.amount || 0), 0);
+
+  const totalBookings = currentMonthBookings.length;
+
   const activeGuests = bookings.filter((b) => {
     const start = new Date(b.checkInDate);
     const end = new Date(b.checkOutDate);
@@ -64,11 +114,12 @@ export default function Dashboard() {
     end.setHours(0, 0, 0, 0);
     return todayDate >= start && todayDate <= end && b.status !== 'cancelled';
   }).length;
-  const pendingCount = bookings.filter((b) => b.status === 'pending').length;
+
+  const pendingCount = currentMonthBookings.filter((b) => b.status === 'pending').length;
 
   const stats = useMemo(() => ([
     { ...statMeta[0], value: totalBookings.toString() },
-    { ...statMeta[1], value: `Rs. ${revenueTotal.toFixed(2)}` },
+    { ...statMeta[1], value: formatMoney(revenueTotal) },
     { ...statMeta[2], value: activeGuests.toString() },
     { ...statMeta[3], value: pendingCount.toString() },
   ]), [totalBookings, revenueTotal, activeGuests, pendingCount]);
@@ -87,14 +138,6 @@ export default function Dashboard() {
     setBookingForm((prev) => ({ ...prev, roomIds: [] }));
     setShowAddBooking(true);
     setSubmitStatus({ type: '', message: '' });
-  };
-
-  const formatLocalDate = (date) => {
-    const d = new Date(date);
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
   };
 
   const calendarData = useMemo(() => {
@@ -141,9 +184,9 @@ export default function Dashboard() {
       const start = new Date(b.checkInDate);
       const end = new Date(b.checkOutDate);
       const d = new Date(date);
-      d.setHours(0,0,0,0);
-      start.setHours(0,0,0,0);
-      end.setHours(0,0,0,0);
+      d.setHours(0, 0, 0, 0);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
       return b.roomId === roomId && d >= start && d <= end;
     });
   };
@@ -153,9 +196,9 @@ export default function Dashboard() {
       const start = new Date(b.checkInDate);
       const end = new Date(b.checkOutDate);
       const d = new Date(date);
-      d.setHours(0,0,0,0);
-      start.setHours(0,0,0,0);
-      end.setHours(0,0,0,0);
+      d.setHours(0, 0, 0, 0);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(0, 0, 0, 0);
       return d >= start && d <= end;
     });
   };
@@ -185,9 +228,8 @@ export default function Dashboard() {
     const fetchRooms = async () => {
       setIsLoadingRooms(true);
       try {
-        const res = await api.get('/rooms', {
-          params: activePropertyId ? { propertyId: activePropertyId } : undefined,
-        });
+        const params = activePropertyId && activePropertyId !== 'all' ? { propertyId: activePropertyId } : {};
+        const res = await api.get('/rooms', { params });
         if (isMounted) {
           setRooms(res.data?.data || []);
         }
@@ -210,13 +252,10 @@ export default function Dashboard() {
 
   const fetchBookingData = useCallback(async () => {
     try {
+      const params = activePropertyId && activePropertyId !== 'all' ? { propertyId: activePropertyId } : {};
       const [bookingsRes, paymentsRes] = await Promise.all([
-        api.get('/bookings', {
-          params: activePropertyId ? { propertyId: activePropertyId } : undefined,
-        }),
-        api.get('/payments', {
-          params: activePropertyId ? { propertyId: activePropertyId } : undefined,
-        }),
+        api.get('/bookings', { params }),
+        api.get('/payments', { params }),
       ]);
       setBookings(bookingsRes.data?.data || []);
       setPayments(paymentsRes.data?.data || []);
@@ -226,9 +265,25 @@ export default function Dashboard() {
     }
   }, [activePropertyId]);
 
+  const fetchSystemStatus = useCallback(async () => {
+    if (isOwner) {
+      try {
+        const [statusRes, paymentsRes] = await Promise.all([
+          api.get('/owner/status'),
+          api.get('/owner/payments')
+        ]);
+        setSystemStatus(statusRes.data || { globalFee: 0, latestBilling: null });
+        setSystemPayments(paymentsRes.data?.data || []);
+      } catch (error) {
+        console.error('Failed to fetch system status', error);
+      }
+    }
+  }, [isOwner]);
+
   useEffect(() => {
     fetchBookingData();
-  }, [fetchBookingData]);
+    fetchSystemStatus();
+  }, [fetchBookingData, fetchSystemStatus]);
 
   const handlePropertyChange = async (event) => {
     const nextId = event.target.value;
@@ -415,8 +470,9 @@ export default function Dashboard() {
         );
       }
 
-      setSubmitStatus({ type: 'success', message: 'Booking saved.' });
-      setShowAddBooking(false);
+      setSubmitStatus({ type: 'success', message: 'Reservation created successfully!' });
+      showToast('Reservation created successfully!', 'success');
+      setTimeout(() => setShowAddBooking(false), 500);
       setBookingForm({
         guestName: '',
         guestContact: '',
@@ -438,8 +494,55 @@ export default function Dashboard() {
     }
   };
 
+  const monthlyPrice = Number(systemStatus.ownerPackagePrice != null ? systemStatus.ownerPackagePrice : systemStatus.globalFee);
+  const baseYearlyPrice = Number(systemStatus.yearlyPrice != null ? systemStatus.yearlyPrice : monthlyPrice * 12);
+  const yearlyDiscount = Number(systemStatus.yearlyDiscount || 0);
+  const yearlyPrice = Math.max(0, baseYearlyPrice - yearlyDiscount);
+  
+  const handleSystemBillingCycleChange = (e) => {
+    const cycle = e.target.value;
+    setSystemPaymentForm(prev => {
+      const updated = { ...prev, billingCycle: cycle };
+      if (cycle === 'yearly') {
+        updated.amount = String(yearlyPrice);
+      } else {
+        const months = getMonthsCovered(updated);
+        updated.amount = String(months * monthlyPrice);
+      }
+      return updated;
+    });
+  };
+
+  const handleSystemDateChange = (field, value) => {
+    setSystemPaymentForm(prev => {
+      const updated = { ...prev, [field]: value };
+      const months = getMonthsCovered(updated);
+      updated.amount = String(months * monthlyPrice);
+      return updated;
+    });
+  };
+
+  const systemPaymentBreakdown = useMemo(() => {
+    if (systemPaymentForm.billingCycle === 'yearly') {
+      return {
+        months: 12,
+        basePrice: baseYearlyPrice,
+        discount: yearlyDiscount,
+        total: yearlyPrice
+      };
+    }
+    const months = getMonthsCovered(systemPaymentForm);
+    return {
+      months,
+      basePrice: monthlyPrice,
+      discount: 0,
+      total: months * monthlyPrice
+    };
+  }, [systemPaymentForm, baseYearlyPrice, yearlyDiscount, yearlyPrice, monthlyPrice]);
+
   return (
-    <div className="p-4 md:p-6 bg-slate-50 min-h-full relative">
+    <div className="p-4 md:p-6 bg-slate-50 min-h-screen pb-20 relative">
+      <ToastComponent />
       <div className="mb-6 md:mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">Hotel Dashboard</h1>
@@ -449,10 +552,34 @@ export default function Dashboard() {
               {selectedProperty.name} · {selectedProperty.address}
             </p>
           )}
-          <div className="mt-2 flex items-center gap-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
-            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">API: {import.meta.env.VITE_API_URL}</span>
-          </div>
+
+          {isOwner && (
+            <div className="mt-2">
+              <button 
+                onClick={() => {
+                  setSystemPaymentForm(prev => ({
+                    ...prev,
+                    billingCycle: 'monthly',
+                    amount: String(systemStatus.remaining > 0 ? systemStatus.remaining : monthlyPrice)
+                  }));
+                  setShowSystemPayment(true);
+                }}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[8px] font-black uppercase tracking-widest transition-all ${
+                  systemStatus.status === 'unpaid' ? 'bg-rose-50 border-rose-100 text-rose-600' :
+                  systemStatus.status === 'partial' ? 'bg-amber-50 border-amber-100 text-amber-600' :
+                  'bg-emerald-50 border-emerald-100 text-emerald-600'
+                }`}
+              >
+                <div className={`h-1.5 w-1.5 rounded-full ${
+                  systemStatus.status === 'unpaid' ? 'bg-rose-500 animate-pulse' :
+                  systemStatus.status === 'partial' ? 'bg-amber-500' :
+                  'bg-emerald-500'
+                }`} />
+                {systemStatus.status === 'unpaid' ? `${systemStatus.monthName || ''} Unpaid: ${formatMoney(systemStatus.remaining)}` :
+                 systemStatus.status === 'partial' ? `${systemStatus.monthName || ''} Due: ${formatMoney(systemStatus.remaining)}` : `${systemStatus.monthName || ''} Fees Paid`}
+              </button>
+            </div>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2 md:gap-3">
           {isOwner && properties.length > 1 && (
@@ -461,6 +588,7 @@ export default function Dashboard() {
               onChange={handlePropertyChange}
               className="bg-white border border-slate-200 rounded-xl px-3 md:px-4 py-2 text-[10px] md:text-xs font-black text-slate-600"
             >
+              <option value="all">All Properties</option>
               {properties.map((property) => (
                 <option key={property.id} value={property.id}>{property.name}</option>
               ))}
@@ -471,21 +599,21 @@ export default function Dashboard() {
               {selectedProperty.name}
             </span>
           )}
-           <div className="bg-slate-200/50 p-1 rounded-2xl flex border border-slate-200">
-            <button 
+          <div className="bg-slate-200/50 p-1 rounded-2xl flex border border-slate-200">
+            <button
               onClick={() => setViewType('calendar')}
               className={`px-3 md:px-4 py-1.5 md:py-2 text-[10px] md:text-xs font-black rounded-xl transition-all ${viewType === 'calendar' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Calendar
             </button>
-            <button 
+            <button
               onClick={() => setViewType('timeline')}
               className={`px-3 md:px-4 py-1.5 md:py-2 text-[10px] md:text-xs font-black rounded-xl transition-all ${viewType === 'timeline' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500 hover:text-slate-700'}`}
             >
               Timeline
             </button>
           </div>
-          <button 
+          <button
             onClick={() => setShowQuickAvailability(true)}
             className="bg-amber-500 hover:bg-amber-600 text-white px-4 md:px-6 py-2.5 md:py-3 rounded-2xl font-black text-[10px] md:text-sm transition-all shadow-lg shadow-amber-100 active:scale-95 flex items-center gap-2"
           >
@@ -503,7 +631,7 @@ export default function Dashboard() {
             </svg>
             Add Booking
           </button>
-          <button 
+          <button
             onClick={handleLogout}
             className="p-2.5 md:p-3 bg-rose-50 text-rose-600 rounded-2xl border border-rose-100 hover:bg-rose-100 transition-all flex items-center gap-2"
             title="System Logout"
@@ -528,7 +656,7 @@ export default function Dashboard() {
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            
+
             <div className="p-6 md:p-10 space-y-6 md:space-y-8 overflow-y-auto md:overflow-visible max-h-[85vh] md:max-h-none custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
@@ -707,11 +835,10 @@ export default function Dashboard() {
                           key={room.id}
                           type="button"
                           onClick={() => toggleRoomSelection(room.id)}
-                          className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${
-                            bookingForm.roomIds.includes(room.id)
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white text-slate-600 border-slate-200'
-                          }`}
+                          className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border transition-all ${bookingForm.roomIds.includes(room.id)
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-slate-600 border-slate-200'
+                            }`}
                         >
                           {room.roomNumber}
                         </button>
@@ -725,7 +852,7 @@ export default function Dashboard() {
               </div>
 
               <div className="pt-6">
-                <button 
+                <button
                   onClick={handleCreateBooking}
                   className="w-full bg-slate-900 text-white py-5 rounded-2xl font-black text-xs md:text-sm shadow-2xl hover:bg-blue-600 active:scale-[0.98] transition-all uppercase tracking-[0.3em]"
                 >
@@ -736,6 +863,260 @@ export default function Dashboard() {
                     {submitStatus.message}
                   </p>
                 )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+
+
+      {/* System Payment Modal */}
+      {showSystemPayment && isOwner && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-500">
+            <div className="p-8 bg-slate-900 text-white flex items-center justify-between">
+              <div>
+                <h3 className="text-2xl font-black tracking-tight">System Settlement</h3>
+                <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">Platform usage fees & billing</p>
+              </div>
+              <button onClick={() => setShowSystemPayment(false)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-8 space-y-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              {systemStatus.latestBilling ? (
+                systemStatus.latestBilling.isPromotion === 1 ? (
+                  <div className="bg-violet-50 p-6 rounded-3xl border border-violet-100 flex items-center gap-4">
+                    <div className="h-12 w-12 bg-violet-100 rounded-2xl flex items-center justify-center text-2xl">🎁</div>
+                    <div>
+                      <p className="text-lg font-black text-violet-700">You got a Free Trial!</p>
+                      <p className="text-xs font-bold text-violet-500 mt-1">For period {systemStatus.latestBilling.periodStart} to {systemStatus.latestBilling.periodEnd}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Due</p>
+                      <p className="text-lg font-black text-slate-900">{formatMoney(systemStatus.latestBilling.amountDue || systemStatus.globalFee)}</p>
+                    </div>
+                    <div className="bg-emerald-50/50 p-5 rounded-3xl border border-emerald-100">
+                      <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Paid Amount</p>
+                      <p className="text-lg font-black text-emerald-700">{formatMoney(systemStatus.totalPaid)}</p>
+                    </div>
+                    <div className="bg-rose-50/50 p-5 rounded-3xl border border-rose-100">
+                      <p className="text-[9px] font-bold text-rose-600 uppercase tracking-widest mb-1">Remaining</p>
+                      <p className="text-lg font-black text-rose-700">{formatMoney(systemStatus.remaining)}</p>
+                    </div>
+                  </div>
+                )
+              ) : (
+                <div className="bg-rose-50/30 p-8 rounded-[2rem] border border-rose-100/50">
+                  <p className="text-[10px] font-bold text-rose-600 uppercase tracking-widest mb-1">Current Monthly Fee Due</p>
+                  <p className="text-4xl font-black text-rose-700 tracking-tighter">{formatMoney(systemStatus.globalFee)}</p>
+                </div>
+              )}
+
+              <div className="admin-card !p-6 border-blue-100 bg-blue-50/5">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest mb-6 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-blue-600" />
+                  Make a Payment
+                </h4>
+                
+                <div className="mb-6">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Billing Cycle</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center gap-1 transition-all ${
+                      systemPaymentForm.billingCycle === 'monthly' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 text-slate-500 hover:border-slate-200 bg-white'
+                    }`}>
+                      <input type="radio" name="dashCycle" value="monthly" checked={systemPaymentForm.billingCycle === 'monthly'} onChange={handleSystemBillingCycleChange} className="hidden" />
+                      <span className="text-sm font-black uppercase tracking-wider">Monthly</span>
+                      <span className="text-xs font-bold opacity-70">{formatMoney(monthlyPrice)}</span>
+                    </label>
+                    <label className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center gap-1 transition-all ${
+                      systemPaymentForm.billingCycle === 'yearly' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 text-slate-500 hover:border-slate-200 bg-white'
+                    }`}>
+                      <input type="radio" name="dashCycle" value="yearly" checked={systemPaymentForm.billingCycle === 'yearly'} onChange={handleSystemBillingCycleChange} className="hidden" />
+                      <div className="flex items-center gap-1">
+                        <span className="text-sm font-black uppercase tracking-wider">Yearly</span>
+                        {yearlyDiscount > 0 && <span className="bg-emerald-100 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded font-black">SAVE {formatMoney(yearlyDiscount)}</span>}
+                      </div>
+                      <span className="text-xs font-bold opacity-70">{formatMoney(yearlyPrice)}</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Start Month + End Month */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Start Month</label>
+                    <input
+                      type="month"
+                      className="admin-input"
+                      value={systemPaymentForm.periodStart || ''}
+                      onChange={(e) => handleSystemDateChange('periodStart', e.target.value)}
+                      required
+                    />
+                  </div>
+                  {systemPaymentForm.billingCycle === 'monthly' && (
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">End Month (Optional)</label>
+                      <input
+                        type="month"
+                        className="admin-input"
+                        value={systemPaymentForm.periodEnd || ''}
+                        onChange={(e) => handleSystemDateChange('periodEnd', e.target.value)}
+                        min={systemPaymentForm.periodStart}
+                      />
+                    </div>
+                  )}
+                  {systemPaymentForm.billingCycle === 'yearly' && (
+                    <div className="space-y-2 flex items-end">
+                      <div className="w-full h-[42px] flex items-center justify-center bg-blue-50 border border-blue-200 text-blue-600 rounded-xl font-bold text-[10px] uppercase tracking-widest">
+                        12 Months
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Payment Method</label>
+                    <select
+                      className="admin-input"
+                      value={systemPaymentForm.method}
+                      onChange={(e) => setSystemPaymentForm(prev => ({ ...prev, method: e.target.value }))}
+                    >
+                      <option value="bank">Bank Transfer</option>
+                      <option value="online">Online Payment</option>
+                      <option value="cash">Direct Cash</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Amount to Pay</label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">LKR</span>
+                      <input
+                        type="number"
+                        className="admin-input !pl-12"
+                        placeholder="0.00"
+                        value={systemPaymentForm.amount}
+                        onChange={(e) => setSystemPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
+                      />
+                    </div>
+                  </div>
+                  <div className="md:col-span-2 space-y-2">
+                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Payment Note / Reference</label>
+                    <input
+                      type="text"
+                      className="admin-input"
+                      placeholder="Transaction ID or Bank Reference"
+                      value={systemPaymentForm.note}
+                      onChange={(e) => setSystemPaymentForm(prev => ({ ...prev, note: e.target.value }))}
+                    />
+                  </div>
+                </div>
+                <div className="mt-6 space-y-4">
+                  {/* Payment Breakdown Preview */}
+                  <div className="rounded-2xl p-4 bg-blue-50 border border-blue-200">
+                    <p className="text-[11px] font-black uppercase tracking-widest mb-3 text-blue-500">
+                      💳 Payment Breakdown
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Base ({systemPaymentBreakdown.months} × {formatMoney(systemPaymentBreakdown.basePrice / (systemPaymentForm.billingCycle === 'yearly' ? 12 : 1))})</span>
+                        <span className="font-bold text-slate-700">{formatMoney(systemPaymentBreakdown.basePrice)}</span>
+                      </div>
+                      {systemPaymentBreakdown.discount > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-emerald-600">Discount</span>
+                          <span className="font-bold text-emerald-600">- {formatMoney(systemPaymentBreakdown.discount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-base font-black border-t border-blue-200 pt-2 mt-2">
+                        <span className="text-slate-800">Total</span>
+                        <span className="text-blue-600">{formatMoney(systemPaymentBreakdown.total)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button
+                    disabled={isSubmittingSystemPayment || !systemPaymentForm.amount}
+                    onClick={async () => {
+                      setIsSubmittingSystemPayment(true);
+                      try {
+                        const months = getMonthsCovered(systemPaymentForm);
+                        let notePrefix = systemPaymentForm.billingCycle === 'yearly' ? '[Yearly] ' : `[Monthly (${months}m)] `;
+                        if (systemPaymentForm.billingCycle === 'monthly') {
+                          notePrefix += `(${systemPaymentForm.periodStart} to ${systemPaymentForm.periodEnd || systemPaymentForm.periodStart}) `;
+                        }
+                        
+                        await api.post('/owner/payments', {
+                          amount: Number(systemPaymentForm.amount),
+                          method: systemPaymentForm.method,
+                          note: (notePrefix + systemPaymentForm.note).trim(),
+                          proofUrl: systemPaymentForm.proofUrl,
+                          billingId: systemStatus.latestBilling?.id
+                        });
+                        setSystemPaymentForm({ 
+                          billingCycle: 'monthly', 
+                          periodStart: new Date().toISOString().slice(0, 7),
+                          periodEnd: '',
+                          amount: '', 
+                          method: 'bank', 
+                          note: '', 
+                          proofUrl: '' 
+                        });
+                        await fetchSystemStatus();
+                        showToast('Payment submitted for verification', 'success');
+                        setShowSystemPayment(false);
+                      } catch (error) {
+                        showToast(error.response?.data?.message || 'Failed to submit payment', 'error');
+                      } finally {
+                        setIsSubmittingSystemPayment(false);
+                      }
+                    }}
+                    className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                  >
+                    {isSubmittingSystemPayment ? 'Submitting...' : 'Submit Payment'}
+                  </button>
+                </div>
+
+              </div>
+
+              <div>
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-slate-400" />
+                  Recent Settlements
+                </h4>
+                <div className="space-y-3">
+                  {systemPayments.length === 0 && (
+                    <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-3xl">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">No payment history found</p>
+                    </div>
+                  )}
+                  {systemPayments.map(pay => (
+                    <div key={pay.id} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center">
+                          <svg className="w-5 h-5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                        </div>
+                        <div>
+                          <p className="text-[11px] font-bold text-slate-900 uppercase tracking-tight">{pay.method} Settlement</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{new Date(pay.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-black text-slate-900">{formatMoney(pay.amount)}</p>
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${pay.status === 'approved' ? 'bg-emerald-50 text-emerald-600' :
+                          pay.status === 'rejected' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'
+                          }`}>
+                          {pay.status}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -818,7 +1199,7 @@ export default function Dashboard() {
             <h2 className="text-xl md:text-2xl font-black text-slate-800 tracking-tight">{viewType === 'timeline' ? 'Room Timeline' : 'Schedule'}</h2>
             <p className="text-[10px] md:text-sm text-slate-400 font-bold uppercase tracking-widest">{monthName} {year}</p>
           </div>
-          
+
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 md:gap-8">
             {/* Status Legend - Wrap on small mobile */}
             <div className="flex flex-wrap items-center gap-3 md:gap-4">
@@ -829,14 +1210,14 @@ export default function Dashboard() {
 
             {/* Navigation Buttons */}
             <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-start">
-              <button 
-                onClick={() => navigateMonth(-1)} 
+              <button
+                onClick={() => navigateMonth(-1)}
                 className="flex-1 sm:flex-none h-10 md:h-12 px-4 md:px-5 rounded-xl md:rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all"
               >
                 <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 19l-7-7 7-7" /></svg>
               </button>
-              <button 
-                onClick={() => navigateMonth(1)} 
+              <button
+                onClick={() => navigateMonth(1)}
                 className="flex-1 sm:flex-none h-10 md:h-12 px-4 md:px-5 rounded-xl md:rounded-2xl border border-slate-200 bg-white shadow-sm flex items-center justify-center hover:bg-slate-50 active:scale-95 transition-all"
               >
                 <svg className="w-5 h-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
@@ -853,8 +1234,8 @@ export default function Dashboard() {
             {calendarData.map((cell, idx) => {
               const bookings = getBookingsForDate(cell.date);
               return (
-                <div 
-                  key={idx} 
+                <div
+                  key={idx}
                   onClick={() => {
                     openBookingModal(cell.date);
                   }}
@@ -873,19 +1254,22 @@ export default function Dashboard() {
                         const rowIndex = bookingRowMap[b.id] || 0;
                         const roomNumber = roomMap[b.roomId] || '';
                         return (
-                          <div 
-                            key={b.id} 
+                          <div
+                            key={b.id}
                             onClick={(e) => {
                               e.stopPropagation();
                               navigate(`/hotel/bookings/${b.id}`);
-                            }} 
-                            className={`absolute left-2 h-7 rounded-lg px-3 flex items-center text-[9px] font-black z-20 shadow-md cursor-pointer whitespace-nowrap overflow-hidden transition-transform hover:scale-[1.02] ${b.status === 'confirmed' ? 'bg-emerald-500 text-white' : b.status === 'pending' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'}`} 
-                            style={{ 
+                            }}
+                            className={`absolute left-2 h-7 rounded-lg px-3 flex items-center text-[9px] font-black z-20 shadow-md cursor-pointer whitespace-nowrap overflow-hidden transition-transform hover:scale-[1.02] ${b.status === 'confirmed' ? 'bg-emerald-500 text-white' : b.status === 'pending' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'}`}
+                            style={{
                               width: `calc(${Math.min(7 - (idx % 7), (new Date(b.checkOutDate) - new Date(b.checkInDate)) / 86400000 + 1)} * 100% - 16px)`,
                               top: `${rowIndex * 32}px`
                             }}
                           >
-                            <span className="truncate">{b.guestName} {roomNumber && `· Room ${roomNumber}`}</span>
+                            <span className="truncate">
+                              {b.guestName} {roomNumber && `· Rm ${roomNumber}`}
+                              {activePropertyId === 'all' && ` · ${properties.find(p => p.id === b.propertyId)?.name || '...'}`}
+                            </span>
                           </div>
                         );
                       }
@@ -919,12 +1303,19 @@ export default function Dashboard() {
                   <div key={room.id} className="flex border-b border-slate-200 hover:bg-slate-50/30 transition-colors group">
                     <div className="w-24 md:w-32 flex-shrink-0 p-3 border-r border-slate-200 sticky left-0 bg-white group-hover:bg-slate-50 z-[25] transition-colors shadow-[4px_0_10px_-5px_rgba(0,0,0,0.1)]">
                       <div className="flex items-center justify-between">
-                        <p className="font-black text-slate-700 text-[10px] md:text-[11px] truncate">Room {room.roomNumber}</p>
-                        <span className={`text-[6px] font-black uppercase px-1 rounded-sm ${parseInt(room.roomNumber, 10) % 2 === 0 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                        <div className="truncate flex-1">
+                          {activePropertyId === 'all' && (
+                            <p className="text-[7px] font-black text-blue-500 uppercase tracking-tighter mb-0.5">
+                              {properties.find(p => p.id === room.propertyId)?.name}
+                            </p>
+                          )}
+                          <p className="font-black text-slate-700 text-[10px] md:text-[11px] leading-tight">Rm {room.roomNumber}</p>
+                        </div>
+                        <span className={`text-[6px] font-black uppercase px-1 rounded-sm ml-1 shrink-0 ${parseInt(room.roomNumber, 10) % 2 === 0 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
                           {parseInt(room.roomNumber, 10) % 2 === 0 ? 'AC' : 'NAC'}
                         </span>
                       </div>
-                      <p className="text-[8px] font-black text-slate-400 uppercase truncate">{room.roomType}</p>
+                      <p className="text-[8px] font-black text-slate-400 uppercase truncate mt-0.5">{room.roomType}</p>
                     </div>
                     <div className="flex flex-1 relative h-14">
                       {timelineDays.map(d => {
@@ -933,14 +1324,13 @@ export default function Dashboard() {
                           <div key={d.day} className={`flex-1 min-w-[30px] border-r border-slate-200 last:border-0 relative ${isToday ? 'bg-blue-50/20' : ''}`}>
                             {getBookingsForRoomAndDate(room.id, d.date).map(b => (
                               new Date(b.checkInDate).toDateString() === d.date.toDateString() && (
-                                <div 
+                                <div
                                   key={b.id}
                                   onClick={() => navigate(`/hotel/bookings/${b.id}`)}
-                                  className={`absolute left-0.5 h-10 rounded-lg flex items-center text-[8px] font-black text-white z-10 cursor-pointer whitespace-nowrap overflow-hidden transition-all hover:scale-[1.02] border-l-2 border-black/10 ${
-                                    b.status === 'confirmed' ? 'bg-emerald-600' : 
-                                    b.status === 'pending' ? 'bg-amber-600' : 
-                                    'bg-blue-700'
-                                  }`}
+                                  className={`absolute left-0.5 h-10 rounded-lg flex items-center text-[8px] font-black text-white z-10 cursor-pointer whitespace-nowrap overflow-hidden transition-all hover:scale-[1.02] border-l-2 border-black/10 ${b.status === 'confirmed' ? 'bg-emerald-600' :
+                                    b.status === 'pending' ? 'bg-amber-600' :
+                                      'bg-blue-700'
+                                    }`}
                                   style={{ width: `calc(${(new Date(b.checkOutDate) - new Date(b.checkInDate)) / 86400000 + 1} * 100% - 4px)` }}
                                 >
                                   <span className="px-1 truncate">{b.guestName}</span>

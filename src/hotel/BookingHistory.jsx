@@ -115,6 +115,8 @@ export default function BookingHistory() {
     }
   };
 
+  const formatDate = (value) => (value ? value.toString().split('T')[0] : '-');
+
   return (
     <div className="p-6 bg-slate-50 min-h-full">
       <div className="max-w-7xl mx-auto">
@@ -230,10 +232,10 @@ export default function BookingHistory() {
                     <td className="px-4 py-4">
                       <div className="flex flex-col gap-0.5">
                         <span className="text-[10px] font-black text-slate-700 flex items-center gap-2">
-                          <div className="w-1 h-1 rounded-full bg-emerald-500"></div> {booking.startDate}
+                          <div className="w-1 h-1 rounded-full bg-emerald-500"></div> {formatDate(booking.startDate)}
                         </span>
                         <span className="text-[10px] font-black text-slate-400 flex items-center gap-2">
-                          <div className="w-1 h-1 rounded-full bg-red-500"></div> {booking.endDate}
+                          <div className="w-1 h-1 rounded-full bg-red-500"></div> {formatDate(booking.endDate)}
                         </span>
                       </div>
                     </td>

@@ -22,6 +22,8 @@ import FinanceReport from './hotel/FinanceReport'
 import BookingDetails from './hotel/booking_details'
 import PropertyManagement from './hotel/Property_managment'
 import Account from './hotel/Account'
+import SystemBilling from './hotel/SystemBilling'
+import Guests from './hotel/Guests'
 
 function RequireAuth({ children }) {
   const { user } = useAuth()
@@ -51,6 +53,8 @@ export default function App() {
         <Route path="finance" element={<RequireRole allowed={['owner', 'admin']}><FinanceReport /></RequireRole>} />
         <Route path="property" element={<RequireRole allowed={['owner', 'admin']}><PropertyManagement /></RequireRole>} />
         <Route path="account" element={<RequireRole allowed={['owner', 'admin']}><Account /></RequireRole>} />
+        <Route path="system-billing" element={<RequireRole allowed={['owner', 'admin']}><SystemBilling /></RequireRole>} />
+        <Route path="guests" element={<RequireRole allowed={['owner', 'admin']}><Guests /></RequireRole>} />
       </Route>
 
       <Route path="/admin" element={<RequireRole allowed={['admin']}><AdminLayout /></RequireRole>}>

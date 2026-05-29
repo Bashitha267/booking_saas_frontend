@@ -17,7 +17,7 @@
   }
   
   .input-field {
-    @apply block w-full rounded-lg border-0 py-2.5 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6 transition-all;
+    @apply block w-full rounded-lg border-0 py-2.5 px-4 text-slate-900 shadow-sm ring-1 ring-inset ring-slate-300 placeholder:text-slate-400 focus:ring-2 focus:ring-inset focus:ring-primary-600 sm:text-sm sm:leading-6 transition-all;
   }
 
   .label-field {
@@ -51,11 +51,11 @@
   }
 
   .admin-metric p {
-    @apply text-[9px] font-bold uppercase tracking-wider text-slate-400;
+    @apply text-xs font-bold uppercase tracking-wider text-slate-400;
   }
 
   .admin-metric h3 {
-    @apply mt-1 text-xl font-extrabold text-slate-900 tracking-tight;
+    @apply mt-1 text-2xl font-extrabold text-slate-900 tracking-tight;
   }
 
   .admin-hero-card {
@@ -63,23 +63,23 @@
   }
 
   .admin-input {
-    @apply h-9 w-full rounded-lg border border-slate-100 bg-slate-50 px-3 text-[12px] font-medium text-slate-700 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/5 placeholder:text-slate-400;
+    @apply h-10 w-full rounded-lg border border-slate-100 bg-slate-50 px-3 text-sm font-medium text-slate-700 transition-all focus:border-blue-500 focus:bg-white focus:outline-none focus:ring-4 focus:ring-blue-500/5 placeholder:text-slate-400;
   }
 
   .admin-button-primary {
-    @apply flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-[11px] font-bold text-white shadow-md shadow-blue-100 transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50;
+    @apply flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-blue-100 transition-all hover:bg-blue-700 active:scale-95 disabled:opacity-50;
   }
 
   .admin-button-secondary {
-    @apply flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-[11px] font-bold text-slate-600 transition-all hover:bg-slate-50 active:scale-95;
+    @apply flex items-center justify-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50 active:scale-95;
   }
 
   .admin-button-ghost {
-    @apply flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-[11px] font-bold text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-600;
+    @apply flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-600;
   }
 
   .admin-pill {
-    @apply inline-flex items-center rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-tight bg-[#f1f5f9] text-[#475569];
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-tight bg-[#f1f5f9] text-[#475569];
   }
 
   .admin-pill.paid,
@@ -112,7 +112,7 @@
   }
 
   .admin-tab {
-    @apply rounded-xl border border-slate-200 px-5 py-2 text-xs font-bold uppercase tracking-wider text-slate-500 transition-all hover:bg-slate-50;
+    @apply rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-bold uppercase tracking-wider text-slate-500 transition-all hover:bg-slate-50;
   }
 
   .admin-tab.active {
@@ -141,15 +141,15 @@
   }
 
   .admin-filter-label {
-    @apply text-[9px] font-bold uppercase tracking-wider text-slate-400 ml-0.5;
+    @apply text-xs font-bold uppercase tracking-wider text-slate-400 ml-0.5;
   }
 
   .admin-filter-input {
-    @apply h-9 rounded-lg border border-blue-100 bg-white px-3 text-[12px] font-medium text-slate-700 transition-all focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none placeholder:text-slate-400;
+    @apply h-10 rounded-lg border border-blue-100 bg-white px-3 text-sm font-medium text-slate-700 transition-all focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none placeholder:text-slate-400;
   }
 
   .admin-filter-btn-reset {
-    @apply flex h-9 w-9 items-center justify-center rounded-lg border border-blue-100 bg-white text-slate-400 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-95;
+    @apply flex h-10 w-10 items-center justify-center rounded-lg border border-blue-100 bg-white text-slate-400 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-95;
   }
 
   /* Compact Table & Text */
@@ -158,11 +158,11 @@
   }
 
   .admin-table th {
-    @apply border-b border-slate-100 bg-slate-50/50 px-3 py-2 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400;
+    @apply border-b border-slate-100 bg-slate-50/50 px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-slate-400;
   }
 
   .admin-table td {
-    @apply border-b border-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-600;
+    @apply border-b border-slate-50 px-3 py-2 text-sm font-medium text-slate-600;
   }
 
   .admin-table-row {
