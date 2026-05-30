@@ -27,7 +27,17 @@ export default function SystemBilling() {
   const [billing, setBilling] = useState([]);
   const [payments, setPayments] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [systemStatus, setSystemStatus] = useState({ globalFee: 0, totalPaid: 0, remaining: 0, status: 'unpaid', ownerPackagePrice: null, yearlyPrice: null, yearlyDiscount: null });
+  const [systemStatus, setSystemStatus] = useState({
+    globalFee: 0,
+    totalPaid: 0,
+    remaining: 0,
+    status: 'unpaid',
+    ownerPackagePrice: null,
+    yearlyPrice: null,
+    yearlyDiscount: null,
+    isCurrentMonthPromotion: false,
+    currentPromotion: null,
+  });
   const { showToast, ToastComponent } = useToast();
 
   const [showPayModal, setShowPayModal] = useState(false);
@@ -52,7 +62,11 @@ export default function SystemBilling() {
       ]);
       setBilling(billingRes.data?.data || []);
       setPayments(paymentsRes.data?.data || []);
-      setSystemStatus(statusRes.data || { globalFee: 0, totalPaid: 0, remaining: 0, status: 'unpaid', ownerPackagePrice: null, yearlyPrice: null, yearlyDiscount: null });
+      setSystemStatus(statusRes.data || {
+        globalFee: 0, totalPaid: 0, remaining: 0, status: 'unpaid',
+        ownerPackagePrice: null, yearlyPrice: null, yearlyDiscount: null,
+        isCurrentMonthPromotion: false, currentPromotion: null,
+      });
     } catch (error) {
       console.error('Failed to fetch billing data', error);
       showToast('Failed to load billing data', 'error');
@@ -70,7 +84,11 @@ export default function SystemBilling() {
   const baseYearlyPrice = Number(systemStatus.yearlyPrice != null ? systemStatus.yearlyPrice : monthlyPrice * 12);
   const yearlyDiscount = Number(systemStatus.yearlyDiscount || 0);
   const yearlyPrice = Math.max(0, baseYearlyPrice - yearlyDiscount);
-  
+
+  // Current month info
+  const now = new Date();
+  const currentMonthLabel = now.toLocaleString(undefined, { month: 'long', year: 'numeric' });
+
   const handleOpenPayModal = () => {
     setPayForm(prev => ({
       ...prev,
@@ -108,7 +126,7 @@ export default function SystemBilling() {
   const handlePaySubmit = async (e) => {
     e.preventDefault();
     if (!payForm.amount) return;
-    
+
     setIsSubmitting(true);
     try {
       const months = getMonthsCovered(payForm);
@@ -159,9 +177,60 @@ export default function SystemBilling() {
     };
   }, [payForm, baseYearlyPrice, yearlyDiscount, yearlyPrice, monthlyPrice]);
 
+  const isPromoMonth = systemStatus.isCurrentMonthPromotion;
+  const promo = systemStatus.currentPromotion;
+
   return (
     <div className="p-4 md:p-8 bg-slate-50 min-h-full">
       <ToastComponent />
+
+      {/* ── Promotion Banner ─────────────────────────────── */}
+      {isPromoMonth && promo && (
+        <div
+          className="mb-6 rounded-[1.5rem] overflow-hidden shadow-lg"
+          style={{
+            background: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 50%, #c084fc 100%)',
+          }}
+        >
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-6 md:p-8">
+            <div className="flex items-center gap-4">
+              <div
+                className="h-14 w-14 rounded-2xl flex items-center justify-center text-xl font-black text-white flex-shrink-0"
+                style={{ background: 'rgba(255,255,255,0.15)' }}
+              >
+                %
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-purple-200 mb-1">
+                  Active Promotion
+                </p>
+                <h2 className="text-xl md:text-2xl font-black text-white leading-tight">
+                  You have a FREE promotion for {currentMonthLabel}!
+                </h2>
+                <p className="text-sm font-bold text-purple-200 mt-1">
+                  Period: {formatDate(promo.periodStart)} → {formatDate(promo.periodEnd)}
+                  &nbsp;·&nbsp;
+                  <span className="text-white">{formatMoney(promo.amountDue)} waived</span>
+                </p>
+                {promo.note && (
+                  <p className="text-xs font-medium text-purple-200 mt-1">
+                    Note: {promo.note}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div
+              className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-black uppercase tracking-widest text-purple-700"
+              style={{ background: 'rgba(255,255,255,0.9)' }}
+            >
+              No Payment Due
+            </div>
+          </div>
+          {/* Decorative strip */}
+          <div style={{ background: 'rgba(255,255,255,0.08)', height: 4 }} />
+        </div>
+      )}
+
       <div className="mb-8">
         <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">System Settlement History</h1>
         <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">
@@ -180,10 +249,12 @@ export default function SystemBilling() {
               <div className="bg-white p-6 md:p-8 rounded-[1.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
                 <div className="md:absolute md:top-0 md:right-0 p-4 md:p-8">
                   <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
+                    isPromoMonth ? 'bg-violet-50 text-violet-600' :
                     systemStatus.status === 'paid' ? 'bg-emerald-50 text-emerald-600' :
                     systemStatus.status === 'partial' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
                   }`}>
-                    {systemStatus.status === 'paid' ? 'Paid & Up-to-date' :
+                    {isPromoMonth ? 'Promotion Active' :
+                     systemStatus.status === 'paid' ? 'Paid & Up-to-date' :
                      systemStatus.status === 'partial' ? 'Pending Approval' : 'Settlement Required'}
                   </span>
                 </div>
@@ -191,96 +262,129 @@ export default function SystemBilling() {
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
                     Platform Usage Fee ({systemStatus.monthName || ''})
                   </p>
-                  <h3 className="text-xl md:text-3xl font-black text-slate-900 mb-6">{formatMoney(systemStatus.globalFee)}</h3>
-                  <div className="space-y-3 max-w-sm">
-                    <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
-                      <span className="text-slate-400">Total Submitted</span>
-                      <span className="text-blue-600">{formatMoney((systemStatus.approvedPaid || 0) + (systemStatus.pendingPaid || 0))}</span>
-                    </div>
-                    <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
-                      <div className={`h-full transition-all duration-1000 ${
-                        systemStatus.status === 'paid' ? 'bg-emerald-500' :
-                        systemStatus.status === 'partial' ? 'bg-amber-500' : 'bg-rose-500'
-                      }`} style={{ width: `${Math.min((((systemStatus.approvedPaid || 0) + (systemStatus.pendingPaid || 0)) / (systemStatus.globalFee || 1)) * 100, 100)}%` }} />
-                    </div>
-                    <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
-                      <span className="text-slate-400">Remaining Balance Due</span>
-                      <span className="text-rose-600 font-black">{formatMoney(systemStatus.remaining)}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-6 pt-6 border-t border-slate-100 flex gap-3">
-                    <button onClick={handleOpenPayModal} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all shadow-sm shadow-emerald-200 uppercase tracking-widest text-xs">
-                      Make Payment
-                    </button>
-                  </div>
+                  <h3 className="text-xl md:text-3xl font-black text-slate-900 mb-6">{formatMoney(monthlyPrice)}</h3>
+                  {!isPromoMonth && (
+                    <>
+                      <div className="space-y-3 max-w-sm">
+                        <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
+                          <span className="text-slate-400">Total Submitted</span>
+                          <span className="text-blue-600">{formatMoney((systemStatus.approvedPaid || 0) + (systemStatus.pendingPaid || 0))}</span>
+                        </div>
+                        <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
+                          <div className={`h-full transition-all duration-1000 ${
+                            systemStatus.status === 'paid' ? 'bg-emerald-500' :
+                            systemStatus.status === 'partial' ? 'bg-amber-500' : 'bg-rose-500'
+                          }`} style={{ width: `${Math.min((((systemStatus.approvedPaid || 0) + (systemStatus.pendingPaid || 0)) / (monthlyPrice || 1)) * 100, 100)}%` }} />
+                        </div>
+                        <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
+                          <span className="text-slate-400">Remaining Balance Due</span>
+                          <span className="text-rose-600 font-black">{formatMoney(systemStatus.remaining)}</span>
+                        </div>
+                      </div>
+                      <div className="mt-6 pt-6 border-t border-slate-100 flex gap-3">
+                        <button onClick={handleOpenPayModal} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all shadow-sm shadow-emerald-200 uppercase tracking-widest text-xs">
+                          Make Payment
+                        </button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
 
-            {regularBills.map(bill => (
-              <div key={bill.id} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
-                <div className="absolute top-0 right-0 p-6 flex flex-col items-end gap-2">
-                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
-                    bill.status === 'paid' ? 'bg-emerald-50 text-emerald-600' :
-                    bill.status === 'partial' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
-                  }`}>
-                    {bill.status}
-                  </span>
-                  {bill.billingCycle === 'yearly' && (
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-blue-50 text-blue-600">📆 Yearly</span>
+            {regularBills.map(bill => {
+              const isFullyPaid = bill.status === 'paid';
+              const isPromo = bill.isPromotion === 1;
+              const remaining = Number(bill.amountDue) - Number(bill.amountPaid);
+              return (
+                <div key={bill.id} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-6 flex flex-col items-end gap-2">
+                    <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
+                      isPromo ? 'bg-violet-50 text-violet-600' :
+                      bill.status === 'paid' ? 'bg-emerald-50 text-emerald-600' :
+                      bill.status === 'partial' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
+                    }`}>
+                      {isPromo ? 'Promotion' : bill.status}
+                    </span>
+                    {bill.billingCycle === 'yearly' && (
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-blue-50 text-blue-600">Yearly</span>
+                    )}
+                  </div>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
+                    Period: {formatDate(bill.periodStart)} → {formatDate(bill.periodEnd)}
+                  </p>
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 capitalize">
+                    {bill.billingCycle || 'Monthly'} Payment
+                  </p>
+                  <h3 className="text-2xl font-black text-slate-900 mb-6">{formatMoney(bill.amountDue)}</h3>
+
+                  {Number(bill.discount) > 0 && (
+                    <p className="text-xs font-bold text-emerald-600 mb-4">
+                      ✓ Discount applied: {formatMoney(bill.discount)}
+                    </p>
+                  )}
+
+                  <div className="space-y-3 max-w-md">
+                    <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
+                      <span className="text-slate-400">Paid</span>
+                      <span className="text-emerald-600">{formatMoney(bill.amountPaid)}</span>
+                    </div>
+                    <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-1000 ${bill.status === 'paid' ? 'bg-emerald-500' : 'bg-amber-400'}`}
+                        style={{ width: `${Math.min(bill.amountDue > 0 ? (bill.amountPaid / bill.amountDue) * 100 : 0, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
+                      <span className="text-slate-400">Remaining</span>
+                      <span className="text-rose-600">{formatMoney(bill.amountDue - bill.amountPaid)}</span>
+                    </div>
+                  </div>
+
+                  {/* Pay button only if not paid and not a promotion */}
+                  {!isPromo && !isFullyPaid && (
+                    <div className="mt-6 pt-6 border-t border-slate-100">
+                      <button
+                        onClick={handleOpenPayModal}
+                        className="w-full max-w-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all shadow-sm shadow-emerald-200 uppercase tracking-widest text-xs"
+                      >
+                        Pay {formatMoney(remaining)} Remaining
+                      </button>
+                    </div>
                   )}
                 </div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
-                  Period: {formatDate(bill.periodStart)} → {formatDate(bill.periodEnd)}
-                </p>
-                <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2 capitalize">
-                  {bill.billingCycle || 'Monthly'} Payment
-                </p>
-                <h3 className="text-2xl font-black text-slate-900 mb-6">{formatMoney(bill.amountDue)}</h3>
-
-                {Number(bill.discount) > 0 && (
-                  <p className="text-xs font-bold text-emerald-600 mb-4">
-                    ✓ Discount applied: {formatMoney(bill.discount)}
-                  </p>
-                )}
-
-                <div className="space-y-3 max-w-md">
-                  <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
-                    <span className="text-slate-400">Paid</span>
-                    <span className="text-emerald-600">{formatMoney(bill.amountPaid)}</span>
-                  </div>
-                  <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-1000 ${bill.status === 'paid' ? 'bg-emerald-500' : 'bg-amber-400'}`}
-                      style={{ width: `${Math.min(bill.amountDue > 0 ? (bill.amountPaid / bill.amountDue) * 100 : 0, 100)}%` }}
-                    />
-                  </div>
-                  <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
-                    <span className="text-slate-400">Remaining</span>
-                    <span className="text-rose-600">{formatMoney(bill.amountDue - bill.amountPaid)}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
         {/* Promotions Section */}
         {promotionBills.length > 0 && (
           <section className="space-y-4">
-            <h2 className="text-xs font-bold text-violet-600 uppercase tracking-widest ml-1">🎁 Promotions & Free Trials</h2>
+            <h2 className="text-xs font-bold text-violet-600 uppercase tracking-widest ml-1">Promotions &amp; Free Trials</h2>
             <div className="grid gap-4">
               {promotionBills.map(bill => (
-                <div key={bill.id} className="bg-violet-50 p-6 rounded-[2rem] border border-violet-100 shadow-sm relative overflow-hidden">
+                <div
+                  key={bill.id}
+                  className="p-6 rounded-[2rem] border shadow-sm relative overflow-hidden"
+                  style={{
+                    background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)',
+                    borderColor: '#d8b4fe',
+                  }}
+                >
                   <div className="absolute top-0 right-0 p-6">
-                    <span className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-violet-100 text-violet-600">Free Trial</span>
+                    <span
+                      className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full"
+                      style={{ background: '#7c3aed', color: '#fff' }}
+                    >
+                      Free Promotion
+                    </span>
                   </div>
                   <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-1">
                     Complimentary Period
                   </p>
                   <p className="text-sm font-bold text-slate-700 mb-1">{formatDate(bill.periodStart)} → {formatDate(bill.periodEnd)}</p>
-                  <h3 className="text-xl font-black text-violet-700 mb-1">
+                  <h3 className="text-xl font-black mb-1" style={{ color: '#7c3aed' }}>
                     {formatMoney(bill.amountDue)} <span className="text-sm font-bold text-violet-400">waived</span>
                   </h3>
                   {bill.note && <p className="text-xs font-medium text-violet-400 mt-2">Note: {bill.note}</p>}
@@ -352,7 +456,7 @@ export default function SystemBilling() {
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
               </button>
             </div>
-            
+
             <form onSubmit={handlePaySubmit} className="p-6 space-y-5">
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Billing Cycle</label>
@@ -448,7 +552,7 @@ export default function SystemBilling() {
                 {/* Payment Breakdown Preview */}
                 <div className="rounded-2xl p-4 bg-blue-50 border border-blue-200">
                   <p className="text-[11px] font-black uppercase tracking-widest mb-3 text-blue-500">
-                    💳 Payment Breakdown
+                    Payment Breakdown
                   </p>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">

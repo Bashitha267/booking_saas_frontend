@@ -7,6 +7,11 @@ function formatMoney(value) {
   return 'LKR ' + number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+function formatPeriodDate(value) {
+  if (!value) return ''
+  return value.split('T')[0]
+}
+
 const statusOptions = ['all', 'pending', 'partial', 'paid', 'promotions', 'overdue']
 const PAGE_SIZE = 10
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -222,11 +227,21 @@ export default function AdminPayments() {
       const remaining = Number(selectedBilling.amountDue ?? 0) - Number(selectedBilling.amountPaid ?? 0)
       if (remaining > 0 && totalAmount > remaining + 0.005) {
         setModalError(
-          `⚠ Payment of ${formatMoney(totalAmount)} exceeds the remaining balance of ${formatMoney(remaining)}. Please reduce the amount or discount.`
+          `Payment of ${formatMoney(totalAmount)} exceeds the remaining balance of ${formatMoney(remaining)}. Please reduce the amount or discount.`
         )
         return
       }
       setModalError('')
+    }
+
+    // For promotions: compute periodEnd = last day of the selected start month.
+    // CRITICAL: the server checks (isPromotion && periodStart && periodEnd) to enter
+    // the promotion code path. Without periodEnd the server treats it as a normal payment.
+    let periodEndValue = undefined
+    if (manualForm.isPromotion && manualForm.periodStart) {
+      const [py, pm] = manualForm.periodStart.split('-').map(Number)
+      const lastDay = new Date(py, pm, 0).getDate() // day 0 of next month = last day of this month
+      periodEndValue = `${manualForm.periodStart}-${String(lastDay).padStart(2, '0')}`
     }
 
     setSaving(true)
@@ -244,12 +259,12 @@ export default function AdminPayments() {
         monthsCovered: months,
         discount: manualForm.isPromotion ? 0 : discount,
         periodStart: `${manualForm.periodStart}-01`,
-        periodEnd: undefined,
+        periodEnd: periodEndValue,
       })
       setRefreshKey(k => k + 1)
       setSelectedBilling(null)
       setManualForm(defaultPayForm)
-      showToast('Payment recorded successfully', 'success')
+      showToast(manualForm.isPromotion ? 'Promotion applied successfully' : 'Payment recorded successfully', 'success')
     } catch (err) {
       const msg = err.response?.data?.message || 'Failed to record payment'
       setModalError(msg)
@@ -311,15 +326,15 @@ export default function AdminPayments() {
     return owners.map((owner) => {
       const record = billingMap.get(owner.id)
       const realPaid = paymentsMap.get(owner.id) || 0
+      // Use the owner's real packagePrice from the owners endpoint (now returned by API)
       const ownerPrice = owner.packagePrice != null ? Number(owner.packagePrice) : globalFee
       if (record) {
-        const amountDue = Number(record.amountDue || 0)
-        const isPaid = realPaid >= amountDue && amountDue > 0
+        const isPromo = record.isPromotion === 1
         return {
           ...record,
           ownerName: `${owner.firstName} ${owner.lastName}`,
-          amountPaid: realPaid,
-          status: isPaid ? 'paid' : (realPaid > 0 ? 'partial' : record.status),
+          amountPaid: Number(record.amountPaid || 0),
+          status: isPromo ? 'promotion' : record.status,
           ownerPackagePrice: ownerPrice,
         }
       }
@@ -476,10 +491,10 @@ export default function AdminPayments() {
               ) : pagedRows.length === 0 ? (
                 <div className="py-12 text-center text-slate-400 font-medium">No records found</div>
               ) : (
-                pagedRows.map((row) => {
+                  pagedRows.map((row) => {
                   const left = Number(row.amountDue || 0) - Number(row.amountPaid || 0)
                   const hasBilling = Boolean(row.id)
-                  const periodText = hasBilling && row.periodStart ? `${row.periodStart} → ${row.periodEnd}` : periodLabel
+                  const periodText = hasBilling && row.periodStart ? `${formatPeriodDate(row.periodStart)} → ${formatPeriodDate(row.periodEnd)}` : periodLabel
                   const isPromo = row.isPromotion === 1
                   return (
                     <div
@@ -497,7 +512,7 @@ export default function AdminPayments() {
                           <p className="text-sm font-medium text-slate-400">{row.contact}</p>
                         </div>
                         <div className="flex flex-col items-end gap-1">
-                          {isPromo && <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 text-violet-600">✨ Promotion</span>}
+                          {isPromo && <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-violet-100 text-violet-600">Promotion</span>}
                           {row.billingCycle === 'yearly' && <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-600">Yearly</span>}
                           {!isPromo && <span className={`admin-pill ${row.status}`}>{row.status}</span>}
                         </div>
@@ -556,7 +571,7 @@ export default function AdminPayments() {
                     pagedRows.map((row) => {
                       const left = Number(row.amountDue || 0) - Number(row.amountPaid || 0)
                       const hasBilling = Boolean(row.id)
-                      const periodText = hasBilling && row.periodStart ? `${row.periodStart} → ${row.periodEnd}` : periodLabel
+                      const periodText = hasBilling && row.periodStart ? `${formatPeriodDate(row.periodStart)} → ${formatPeriodDate(row.periodEnd)}` : periodLabel
                       const isPromo = row.isPromotion === 1
                       return (
                         <tr
@@ -575,18 +590,23 @@ export default function AdminPayments() {
                           <td className="text-slate-600">{periodText}</td>
                           <td>
                             {isPromo
-                              ? <span className="text-[11px] font-black uppercase px-2 py-0.5 rounded-full bg-violet-100 text-violet-600">🎁 Promo</span>
+                              ? <span className="text-[11px] font-black uppercase px-2 py-0.5 rounded-full bg-violet-100 text-violet-600">Promo</span>
                               : <span className="text-[11px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500">{row.billingCycle || 'Monthly'}</span>
                             }
                           </td>
-                          <td><span className={`admin-pill ${row.status}`}>{row.status}</span></td>
-                          <td className="font-bold text-slate-900">{formatMoney(row.amountDue)}</td>
-                          <td className="font-bold text-emerald-600">{formatMoney(row.amountPaid)}</td>
-                          <td className={`font-bold ${left > 0 ? 'text-rose-600' : 'text-slate-400'}`}>{formatMoney(left)}</td>
+                          <td>
+                            {isPromo
+                              ? <span className="admin-pill" style={{background:'#ede9fe',color:'#7c3aed'}}>Promotion</span>
+                              : <span className={`admin-pill ${row.status}`}>{row.status}</span>
+                            }
+                          </td>
+                          <td className="font-bold text-slate-900">{isPromo ? <span className="line-through text-slate-400">{formatMoney(row.amountDue)}</span> : formatMoney(row.amountDue)}</td>
+                          <td className="font-bold text-emerald-600">{isPromo ? <span className="text-violet-600">Waived</span> : formatMoney(row.amountPaid)}</td>
+                          <td className={`font-bold ${!isPromo && left > 0 ? 'text-rose-600' : 'text-slate-400'}`}>{isPromo ? '—' : formatMoney(left)}</td>
                           <td>
                             <div className="flex items-center gap-2">
                               <button className="admin-button-primary !px-3 !py-1" onClick={() => openManualPayment({ ownerId: row.ownerId, billingId: row.id || null, ownerName: `${row.firstName} ${row.lastName}`, ownerPackagePrice: row.ownerPackagePrice })}>
-                                Pay
+                                {isPromo ? 'Extend' : 'Pay'}
                               </button>
                               <button className="admin-button-secondary !px-3 !py-1" onClick={() => openHistory(row.ownerId)}>History</button>
                             </div>
@@ -668,7 +688,7 @@ export default function AdminPayments() {
                 onClick={() => setManualForm(prev => ({ ...prev, isPromotion: !prev.isPromotion }))}
               >
                 <div>
-                  <p className="text-sm font-bold text-slate-900">🎁 Free Trial / Promotion</p>
+                  <p className="text-sm font-bold text-slate-900">Free Trial / Promotion</p>
                   <p className="text-xs font-medium text-slate-400 mt-0.5">Mark this period as waived — counts as promotion, not revenue</p>
                 </div>
                 <div className={`w-11 h-6 rounded-full transition-all flex items-center px-0.5 ${manualForm.isPromotion ? 'bg-violet-500' : 'bg-slate-200'}`}>
@@ -688,7 +708,7 @@ export default function AdminPayments() {
                         onClick={() => setManualForm(prev => ({ ...prev, billingCycle: cycle }))}
                         className={`py-2.5 rounded-xl border font-bold text-sm transition-all ${manualForm.billingCycle === cycle ? 'border-blue-500 bg-blue-50 text-blue-600 ring-1 ring-blue-500/20' : 'border-slate-100 bg-slate-50 text-slate-400 hover:bg-white'}`}
                       >
-                        {cycle === 'monthly' ? '📅 Monthly' : '📆 Yearly'}
+                        {cycle === 'monthly' ? 'Monthly' : 'Yearly'}
                       </button>
                     ))}
                   </div>
@@ -785,7 +805,7 @@ export default function AdminPayments() {
               {paymentBreakdown && (
                 <div className={`rounded-2xl p-4 border ${paymentBreakdown.type === 'promotion' ? 'bg-violet-50 border-violet-200' : 'bg-blue-50 border-blue-200'}`}>
                   <p className={`text-[11px] font-black uppercase tracking-widest mb-3 ${paymentBreakdown.type === 'promotion' ? 'text-violet-500' : 'text-blue-500'}`}>
-                    {paymentBreakdown.type === 'promotion' ? '🎁 Promotion Summary' : '💳 Payment Breakdown'}
+                    {paymentBreakdown.type === 'promotion' ? 'Promotion Summary' : 'Payment Breakdown'}
                   </p>
                   {paymentBreakdown.type === 'promotion' ? (
                     <div className="space-y-1">
@@ -836,7 +856,7 @@ export default function AdminPayments() {
                   type="submit"
                   disabled={saving || !!modalError}
                 >
-                  {saving ? 'Processing...' : (manualForm.isPromotion ? '🎁 Apply Promotion' : 'Confirm Payment')}
+                  {saving ? 'Processing...' : (manualForm.isPromotion ? 'Apply Promotion' : 'Confirm Payment')}
                 </button>
               </div>
             </form>

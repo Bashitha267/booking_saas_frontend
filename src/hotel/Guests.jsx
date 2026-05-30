@@ -271,8 +271,8 @@ export default function Guests() {
       {/* Guest Detail Modal */}
       {selected && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-end md:items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 pt-8 pb-10 relative">
+          <div className="w-full max-w-md bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300 max-h-[90vh] flex flex-col">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 pt-8 pb-10 relative flex-shrink-0">
               <button onClick={() => setSelected(null)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-all">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -286,40 +286,44 @@ export default function Guests() {
                 </div>
               </div>
             </div>
-            <div className="-mt-6 mx-4 bg-white rounded-2xl shadow-sm border border-slate-100 p-4 grid grid-cols-3 gap-3">
-              <div className="text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase">Check-In</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{formatDate(selected.checkInDate)}</p>
-              </div>
-              <div className="text-center border-x border-slate-100">
-                <p className="text-[10px] font-black text-slate-400 uppercase">Nights</p>
-                <p className="text-lg font-black text-blue-600 mt-0.5">{calcNights(selected.checkInDate, selected.checkOutDate)}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase">Check-Out</p>
-                <p className="text-xs font-black text-slate-900 mt-0.5">{formatDate(selected.checkOutDate)}</p>
-              </div>
-            </div>
-            <div className="p-6 pt-4 space-y-3">
-              {[
-                { label: 'Property', value: selected.propertyName },
-                { label: 'Room', value: `${selected.roomNumber} — ${selected.roomType}${selected.floor ? ` (Floor ${selected.floor})` : ''}` },
-                { label: 'Guests', value: `${selected.adults} Adult${selected.adults !== 1 ? 's' : ''}${selected.children > 0 ? `, ${selected.children} Child${selected.children !== 1 ? 'ren' : ''}` : ''}` },
-                selected.guestNic ? { label: 'NIC', value: selected.guestNic } : null,
-                { label: 'Status', value: selected.status, isStatus: true },
-                selected.notes ? { label: 'Notes', value: selected.notes } : null,
-              ].filter(Boolean).map(({ label, value, isStatus }) => (
-                <div key={label} className="flex items-start justify-between gap-3">
-                  <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex-shrink-0 w-20">{label}</span>
-                  {isStatus ? (
-                    <span className={`text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${statusColors[value] || 'bg-slate-100 text-slate-500'}`}>{value}</span>
-                  ) : (
-                    <span className="text-sm font-bold text-slate-800 text-right">{value}</span>
-                  )}
+            
+            <div className="flex-1 overflow-y-auto">
+              <div className="-mt-6 mx-4 bg-white rounded-2xl shadow-sm border border-slate-100 p-4 grid grid-cols-3 gap-3 relative z-10">
+                <div className="text-center">
+                  <p className="text-[10px] font-black text-slate-400 uppercase">Check-In</p>
+                  <p className="text-xs font-black text-slate-900 mt-0.5">{formatDate(selected.checkInDate)}</p>
                 </div>
-              ))}
+                <div className="text-center border-x border-slate-100">
+                  <p className="text-[10px] font-black text-slate-400 uppercase">Nights</p>
+                  <p className="text-lg font-black text-blue-600 mt-0.5">{calcNights(selected.checkInDate, selected.checkOutDate)}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-[10px] font-black text-slate-400 uppercase">Check-Out</p>
+                  <p className="text-xs font-black text-slate-900 mt-0.5">{formatDate(selected.checkOutDate)}</p>
+                </div>
+              </div>
+              <div className="p-6 pt-4 space-y-3">
+                {[
+                  { label: 'Property', value: selected.propertyName },
+                  { label: 'Room', value: `${selected.roomNumber} — ${selected.roomType}${selected.floor ? ` (Floor ${selected.floor})` : ''}` },
+                  { label: 'Guests', value: `${selected.adults} Adult${selected.adults !== 1 ? 's' : ''}${selected.children > 0 ? `, ${selected.children} Child${selected.children !== 1 ? 'ren' : ''}` : ''}` },
+                  selected.guestNic ? { label: 'NIC', value: selected.guestNic } : null,
+                  { label: 'Status', value: selected.status, isStatus: true },
+                  selected.notes ? { label: 'Notes', value: selected.notes } : null,
+                ].filter(Boolean).map(({ label, value, isStatus }) => (
+                  <div key={label} className="flex items-start justify-between gap-3">
+                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex-shrink-0 w-20">{label}</span>
+                    {isStatus ? (
+                      <span className={`text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${statusColors[value] || 'bg-slate-100 text-slate-500'}`}>{value}</span>
+                    ) : (
+                      <span className="text-sm font-bold text-slate-800 text-right">{value}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="px-6 pb-6">
+            
+            <div className="px-6 pb-6 pt-2 flex-shrink-0 bg-white border-t border-slate-50">
               <button onClick={() => setSelected(null)} className="w-full py-3 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-all">
                 Close
               </button>

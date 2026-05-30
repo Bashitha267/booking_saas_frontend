@@ -176,8 +176,9 @@ export default function AdminUsers() {
   }
 
   const ownerPrice = details?.owner?.packagePrice != null ? Number(details.owner.packagePrice) : globalFee
-  const isPaid = details ? details.realPaid >= ownerPrice : false
-  const isPartial = details ? details.realPaid > 0 && !isPaid : false
+  const isPromoActive = details?.currentBilling?.isPromotion === 1
+  const isPaid = details ? (isPromoActive ? true : details.realPaid >= ownerPrice) : false
+  const isPartial = details ? (isPromoActive ? false : details.realPaid > 0 && !isPaid) : false
 
   return (
     <>
@@ -268,9 +269,15 @@ export default function AdminUsers() {
                       <span className="inline-flex items-center justify-center px-2 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-black">{owner.staffCount || 0}</span>
                     </td>
                     <td className="py-3">
-                      <span className={`admin-pill ${owner.currentBillingStatus || 'pending'} text-[10px]`}>
-                        {owner.currentBillingStatus || 'pending'}
-                      </span>
+                      {owner.currentIsPromotion === 1 ? (
+                        <span className="admin-pill text-[10px]" style={{ background: '#ede9fe', color: '#7c3aed' }}>
+                          Promotion
+                        </span>
+                      ) : (
+                        <span className={`admin-pill ${owner.currentBillingStatus || 'pending'} text-[10px]`}>
+                          {owner.currentBillingStatus || 'pending'}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 text-right">
                       <button
@@ -350,19 +357,25 @@ export default function AdminUsers() {
                   {activeTab === 'Overview' && (
                     <div className="space-y-4">
                       {/* Financial Summary Card */}
-                      <div className="bg-gradient-to-br from-slate-800 to-blue-950 rounded-2xl p-5 text-white shadow-xl">
+                      <div className={`bg-gradient-to-br ${isPromoActive ? 'from-violet-900 to-slate-950 border border-violet-500/20' : 'from-slate-800 to-blue-950'} rounded-2xl p-5 text-white shadow-xl`}>
                         <div className="flex items-start justify-between mb-5">
                           <div>
                             <p className="text-xs font-black text-blue-300 uppercase tracking-[0.2em]">Platform Settlement</p>
                             <p className="text-lg font-black text-white mt-0.5">{details.currentMonth}</p>
                           </div>
-                          <span className={`text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full ${
-                            isPaid ? 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30' :
-                            isPartial ? 'bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30' :
-                            'bg-rose-500/20 text-rose-400 ring-1 ring-rose-500/30'
-                          }`}>
-                            {isPaid ? '✓ Fully Paid' : isPartial ? '◑ Partial' : '✗ Unpaid'}
-                          </span>
+                          {isPromoActive ? (
+                            <span className="text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full bg-violet-500/20 text-violet-300 ring-1 ring-violet-500/30">
+                              🎁 Promotion
+                            </span>
+                          ) : (
+                            <span className={`text-[11px] font-black uppercase tracking-wider px-3 py-1 rounded-full ${
+                              isPaid ? 'bg-emerald-500/20 text-emerald-400 ring-1 ring-emerald-500/30' :
+                              isPartial ? 'bg-amber-500/20 text-amber-400 ring-1 ring-amber-500/30' :
+                              'bg-rose-500/20 text-rose-400 ring-1 ring-rose-500/30'
+                            }`}>
+                              {isPaid ? '✓ Fully Paid' : isPartial ? '◑ Partial' : '✗ Unpaid'}
+                            </span>
+                          )}
                         </div>
                         <div className="grid grid-cols-2 gap-3 mb-4">
                           <div className="bg-white/8 rounded-xl p-3 border border-white/10">
@@ -372,20 +385,47 @@ export default function AdminUsers() {
                             <p className="text-xl font-black">{formatMoney(ownerPrice)}</p>
                           </div>
                           <div className="bg-white/8 rounded-xl p-3 border border-white/10">
-                            <p className="text-[11px] font-black text-emerald-400 uppercase tracking-wider mb-1">Collected</p>
-                            <p className="text-xl font-black text-emerald-400">{formatMoney(details.realPaid)}</p>
+                            <p className={`text-[11px] font-black ${isPromoActive ? 'text-violet-300' : 'text-emerald-400'} uppercase tracking-wider mb-1`}>Collected</p>
+                            <p className={`text-xl font-black ${isPromoActive ? 'text-violet-300' : 'text-emerald-400'}`}>
+                              {isPromoActive ? 'Waived' : formatMoney(details.realPaid)}
+                            </p>
                           </div>
                         </div>
                         <div className="h-2 w-full bg-white/10 rounded-full overflow-hidden mb-2">
                           <div
-                            className={`h-full rounded-full transition-all duration-700 ${isPaid ? 'bg-emerald-500' : isPartial ? 'bg-amber-400' : 'bg-rose-500'}`}
-                            style={{ width: `${Math.min(ownerPrice > 0 ? (details.realPaid / ownerPrice) * 100 : 0, 100)}%` }}
+                            className={`h-full rounded-full transition-all duration-700 ${isPromoActive ? 'bg-violet-400' : isPaid ? 'bg-emerald-500' : isPartial ? 'bg-amber-400' : 'bg-rose-500'}`}
+                            style={{ width: `${isPromoActive ? 100 : Math.min(ownerPrice > 0 ? (details.realPaid / ownerPrice) * 100 : 0, 100)}%` }}
                           />
                         </div>
-                        {!isPaid && (
+                        {isPromoActive ? (
+                          <p className="text-xs font-bold text-violet-300">Active Promotion (No payment due for {details.currentMonth})</p>
+                        ) : !isPaid ? (
                           <p className="text-xs font-bold text-rose-300">Balance due: {formatMoney(Math.max(0, ownerPrice - details.realPaid))}</p>
-                        )}
+                        ) : null}
                       </div>
+
+                      {/* Promo Info Notification Card */}
+                      {isPromoActive && (
+                        <div className="bg-violet-50 border border-violet-100 rounded-2xl p-5 flex items-start gap-4">
+                          <div className="h-10 w-10 rounded-xl bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5a2 2 0 10-2 2h2zm0 0h4m-4 0h-4m0 0v13m0-13A2 2 0 118 6h2m0 0V5a2 2 0 102 2h-2z" />
+                            </svg>
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-violet-600 uppercase tracking-widest mb-1">Active Promotion Info</p>
+                            <p className="text-sm font-bold text-slate-700">
+                              This owner is enjoying a free promotion for the period <span className="font-extrabold text-violet-700">{details.currentBilling?.periodStart ? new Date(details.currentBilling.periodStart).toLocaleDateString(undefined, { year: 'numeric', month: 'long' }) : ''} to {details.currentBilling?.periodEnd ? new Date(details.currentBilling.periodEnd).toLocaleDateString(undefined, { year: 'numeric', month: 'long' }) : ''}</span>.
+                            </p>
+                            {details.currentBilling?.note && (
+                              <p className="text-xs font-medium text-slate-500 mt-2 bg-white/80 p-2.5 rounded-lg border border-slate-100">
+                                <span className="font-bold text-slate-600 block uppercase tracking-wider text-[9px] mb-1">Admin Note:</span>
+                                "{details.currentBilling.note}"
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       {/* Quick Stats */}
                       <div className="grid grid-cols-3 gap-3">
