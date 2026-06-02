@@ -248,11 +248,11 @@ export default function BookingHistory() {
                       <span className={getPaymentColor(booking.paymentStatus)}>{booking.paymentStatus}</span>
                     </td>
                     <td className="px-4 py-4 text-right">
-                      <button className="p-1.5 hover:bg-white rounded-xl transition-colors text-slate-300 hover:text-blue-600">
+                      <div className="p-1.5 hover:bg-white rounded-xl transition-colors text-slate-300 hover:text-blue-600 inline-block">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" />
                         </svg>
-                      </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

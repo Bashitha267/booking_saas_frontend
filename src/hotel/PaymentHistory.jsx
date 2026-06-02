@@ -75,7 +75,8 @@ export default function PaymentHistory() {
         amount: Number(pay.amount || 0),
         dateValue,
         dateLabel: dateValue ? dateValue.toISOString().slice(0, 10) : '',
-        reason: pay.status || 'Payment',
+        reason: pay.note || 'General Payment',
+        status: pay.status || 'paid',
         method: pay.method ? pay.method.toUpperCase() : 'CASH',
       };
     });
@@ -85,9 +86,10 @@ export default function PaymentHistory() {
     return normalizedPayments.filter(pay => {
       const matchesSearch = pay.guestName.toLowerCase().includes(searchTerm.toLowerCase()) || 
                             pay.reason.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            pay.status.toLowerCase().includes(searchTerm.toLowerCase()) ||
                             String(pay.bookingId || '').includes(searchTerm);
       
-      const payDate = pay.dateValue || null;
+      const payDate = pay.dateValue ? new Date(pay.dateValue) : null;
       const start = fromDate ? new Date(fromDate) : null;
       const end = toDate ? new Date(toDate) : null;
 
@@ -100,7 +102,17 @@ export default function PaymentHistory() {
     });
   }, [normalizedPayments, searchTerm, fromDate, toDate]);
 
-  const totalAmount = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+  const totalAmount = useMemo(() => {
+    return filteredPayments
+      .filter(p => p.status !== 'refunded')
+      .reduce((sum, p) => sum + p.amount, 0);
+  }, [filteredPayments]);
+
+  const totalRefunded = useMemo(() => {
+    return filteredPayments
+      .filter(p => p.status === 'refunded')
+      .reduce((sum, p) => sum + p.amount, 0);
+  }, [filteredPayments]);
   
   const totalPages = Math.ceil(filteredPayments.length / itemsPerPage);
   const paginatedPayments = filteredPayments.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -117,11 +129,17 @@ export default function PaymentHistory() {
           </p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <div className="bg-white px-6 py-4 rounded-2xl shadow-sm border border-slate-100 text-right">
             <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Received</p>
             <p className="text-2xl font-black text-blue-600 tracking-tighter">Rs. {totalAmount.toFixed(2)}</p>
           </div>
+          {totalRefunded > 0 && (
+            <div className="bg-white px-6 py-4 rounded-2xl shadow-sm border border-slate-100 text-right">
+              <p className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-1">Total Refunded</p>
+              <p className="text-2xl font-black text-red-600 tracking-tighter">Rs. {totalRefunded.toFixed(2)}</p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -170,14 +188,15 @@ export default function PaymentHistory() {
       {/* Payment Table */}
       <div className="bg-white rounded-[1.5rem] md:rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-100 overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full min-w-[850px] text-left border-collapse">
             <thead>
               <tr className="bg-slate-50/50 border-b border-slate-100">
-                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date</th>
+                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Date & Time</th>
                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Guest & Contact</th>
                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Booking ID</th>
                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Reason / Description</th>
                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Method</th>
+                <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Amount</th>
                 <th className="p-5 text-[10px] font-black text-slate-400 uppercase tracking-widest"></th>
               </tr>
@@ -201,10 +220,10 @@ export default function PaymentHistory() {
                 <tr key={pay.id} className="hover:bg-slate-50/50 transition-colors group">
                   <td className="p-5">
                     <p className="text-xs font-black text-slate-700">
-                      {pay.dateValue ? pay.dateValue.toLocaleDateString('default', { day: 'numeric', month: 'short' }) : '-'}
+                      {pay.dateValue ? pay.dateValue.toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
                     </p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase">
-                      {pay.dateValue ? pay.dateValue.getFullYear() : '--'}
+                    <p className="text-[10px] font-bold text-slate-405 mt-0.5">
+                      {pay.dateValue ? pay.dateValue.toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--'}
                     </p>
                   </td>
                   <td className="p-5">
@@ -213,7 +232,15 @@ export default function PaymentHistory() {
                   </td>
                   <td className="p-5 text-xs font-black text-slate-500">#{pay.bookingId}</td>
                   <td className="p-5">
-                    <p className="text-xs font-bold text-slate-600 italic">"{pay.reason}"</p>
+                    <span className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                      pay.reason === 'Advance Payment' 
+                        ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                        : pay.reason === 'Full Payment'
+                        ? 'bg-slate-50 text-slate-700 border-slate-350'
+                        : 'bg-slate-50 text-slate-400 border-slate-200 italic'
+                    }`}>
+                      {pay.reason}
+                    </span>
                   </td>
                   <td className="p-5">
                     <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest border ${
@@ -224,8 +251,22 @@ export default function PaymentHistory() {
                       {pay.method}
                     </span>
                   </td>
-                  <td className="p-5 text-right text-sm font-black text-slate-800 tracking-tighter">
-                    Rs. {pay.amount.toFixed(2)}
+                  <td className="p-5">
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+                      pay.status === 'refunded' ? 'bg-red-50 border-red-200 text-red-800' : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    }`}>
+                      {pay.status}
+                    </span>
+                  </td>
+                  <td className="p-5 text-right tracking-tighter">
+                    {pay.status === 'refunded' ? (
+                      <div>
+                        <span className="text-sm font-black text-red-600 line-through">Rs. {pay.amount.toFixed(2)}</span>
+                        <span className="block text-[9px] font-bold text-red-500 uppercase mt-0.5">Refunded</span>
+                      </div>
+                    ) : (
+                      <span className="text-sm font-black text-slate-800">Rs. {pay.amount.toFixed(2)}</span>
+                    )}
                   </td>
                   <td className="p-5 text-right">
                     <button 

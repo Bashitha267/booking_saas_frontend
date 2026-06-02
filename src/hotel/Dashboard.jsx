@@ -78,7 +78,8 @@ export default function Dashboard() {
     amount: '', 
     method: 'bank', 
     note: '', 
-    proofUrl: '' 
+    proofUrl: '',
+    proofFileName: ''
   });
   const [isSubmittingSystemPayment, setIsSubmittingSystemPayment] = useState(false);
 
@@ -362,7 +363,7 @@ export default function Dashboard() {
         price: room.price || 0,
         rooms: [],
       };
-      current.rooms.push(room.roomNumber);
+      current.rooms.push({ roomNumber: room.roomNumber, hasAc: room.hasAc });
       grouped.set(key, current);
     });
 
@@ -564,19 +565,26 @@ export default function Dashboard() {
                   }));
                   setShowSystemPayment(true);
                 }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[8px] font-black uppercase tracking-widest transition-all ${
-                  systemStatus.status === 'unpaid' ? 'bg-rose-50 border-rose-100 text-rose-600' :
-                  systemStatus.status === 'partial' ? 'bg-amber-50 border-amber-100 text-amber-600' :
-                  'bg-emerald-50 border-emerald-100 text-emerald-600'
-                }`}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-slate-200 bg-white text-[8px] font-black uppercase tracking-widest text-slate-700 hover:bg-slate-50 transition-all"
               >
                 <div className={`h-1.5 w-1.5 rounded-full ${
-                  systemStatus.status === 'unpaid' ? 'bg-rose-500 animate-pulse' :
+                  systemStatus.status === 'unpaid' ? 'bg-rose-550 animate-pulse' :
                   systemStatus.status === 'partial' ? 'bg-amber-500' :
                   'bg-emerald-500'
                 }`} />
-                {systemStatus.status === 'unpaid' ? `${systemStatus.monthName || ''} Unpaid: ${formatMoney(systemStatus.remaining)}` :
-                 systemStatus.status === 'partial' ? `${systemStatus.monthName || ''} Due: ${formatMoney(systemStatus.remaining)}` : `${systemStatus.monthName || ''} Fees Paid`}
+                {systemStatus.status === 'unpaid' ? (
+                  <>
+                    <span>{systemStatus.monthName || ''} Unpaid:&nbsp;</span>
+                    <span className="text-rose-600">{formatMoney(systemStatus.remaining)}</span>
+                  </>
+                ) : systemStatus.status === 'partial' ? (
+                  <>
+                    <span>{systemStatus.monthName || ''} Due:&nbsp;</span>
+                    <span className="text-amber-600">{formatMoney(systemStatus.remaining)}</span>
+                  </>
+                ) : (
+                  <span className="text-emerald-600">{systemStatus.monthName || ''} Fees Paid</span>
+                )}
               </button>
             </div>
           )}
@@ -870,100 +878,99 @@ export default function Dashboard() {
       )}
 
 
-
-      {/* System Payment Modal */}
+      {/* System Payment Modal */}
       {showSystemPayment && isOwner && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-500">
-            <div className="p-8 bg-slate-900 text-white flex items-center justify-between">
+          <div className="bg-white w-full max-w-xl rounded-[1.5rem] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-500">
+            <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
               <div>
-                <h3 className="text-2xl font-black tracking-tight">System Settlement</h3>
-                <p className="text-[10px] font-bold opacity-60 uppercase tracking-widest mt-1">Platform usage fees & billing</p>
+                <h3 className="text-sm font-black tracking-tight">System Settlement</h3>
+                <p className="text-[9px] font-bold opacity-60 uppercase tracking-widest mt-0.5">Platform usage fees & billing</p>
               </div>
               <button onClick={() => setShowSystemPayment(false)} className="p-2 hover:bg-slate-800 rounded-xl transition-colors">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
-            <div className="p-8 space-y-8 max-h-[75vh] overflow-y-auto custom-scrollbar">
+            <div className="p-5 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
               {systemStatus.latestBilling ? (
                 systemStatus.latestBilling.isPromotion === 1 ? (
-                  <div className="bg-violet-50 p-6 rounded-3xl border border-violet-100 flex items-center gap-4">
-                    <div className="h-12 w-12 bg-violet-100 rounded-2xl flex items-center justify-center text-2xl">🎁</div>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex items-center gap-4">
+                    <div className="h-10 w-10 bg-slate-200 rounded-xl flex items-center justify-center text-xl">🎁</div>
                     <div>
-                      <p className="text-lg font-black text-violet-700">You got a Free Trial!</p>
-                      <p className="text-xs font-bold text-violet-500 mt-1">For period {systemStatus.latestBilling.periodStart} to {systemStatus.latestBilling.periodEnd}</p>
+                      <p className="text-sm font-black text-slate-850">You got a Free Trial!</p>
+                      <p className="text-[10px] font-bold text-slate-450 mt-0.5">For period {systemStatus.latestBilling.periodStart} to {systemStatus.latestBilling.periodEnd}</p>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="bg-slate-50 p-5 rounded-3xl border border-slate-100">
-                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mb-1">Total Due</p>
-                      <p className="text-lg font-black text-slate-900">{formatMoney(systemStatus.latestBilling.amountDue || systemStatus.globalFee)}</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className="bg-white p-3 rounded-xl border border-slate-200">
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Due</p>
+                      <p className="text-sm font-black text-slate-950">{formatMoney(systemStatus.latestBilling.amountDue || monthlyPrice)}</p>
                     </div>
-                    <div className="bg-emerald-50/50 p-5 rounded-3xl border border-emerald-100">
-                      <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-widest mb-1">Paid Amount</p>
-                      <p className="text-lg font-black text-emerald-700">{formatMoney(systemStatus.totalPaid)}</p>
+                    <div className="bg-white p-3 rounded-xl border border-slate-200">
+                      <p className="text-[8px] font-black text-slate-450 uppercase tracking-widest mb-1">Paid Amount</p>
+                      <p className="text-sm font-black text-slate-950">{formatMoney((systemStatus.approvedPaid || 0) + (systemStatus.pendingPaid || 0))}</p>
                     </div>
-                    <div className="bg-rose-50/50 p-5 rounded-3xl border border-rose-100">
-                      <p className="text-[9px] font-bold text-rose-600 uppercase tracking-widest mb-1">Remaining</p>
-                      <p className="text-lg font-black text-rose-700">{formatMoney(systemStatus.remaining)}</p>
+                    <div className="bg-white p-3 rounded-xl border border-slate-200">
+                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Remaining</p>
+                      <p className="text-sm font-black text-rose-600">{formatMoney(systemStatus.remaining)}</p>
                     </div>
                   </div>
                 )
               ) : (
-                <div className="bg-rose-50/30 p-8 rounded-[2rem] border border-rose-100/50">
-                  <p className="text-[10px] font-bold text-rose-600 uppercase tracking-widest mb-1">Current Monthly Fee Due</p>
-                  <p className="text-4xl font-black text-rose-700 tracking-tighter">{formatMoney(systemStatus.globalFee)}</p>
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 text-center">
+                  <p className="text-[9px] font-bold text-slate-450 uppercase tracking-widest mb-1">Current Monthly Fee Due</p>
+                  <p className="text-xl font-black text-rose-600 tracking-tight">{formatMoney(monthlyPrice)}</p>
                 </div>
               )}
 
-              <div className="admin-card !p-6 border-blue-100 bg-blue-50/5">
-                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-widest mb-6 flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-blue-600" />
+              <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
+                <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-slate-900" />
                   Make a Payment
                 </h4>
                 
-                <div className="mb-6">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Billing Cycle</label>
+                <div className="mb-4">
+                  <label className="text-[9px] font-bold text-slate-450 uppercase tracking-widest ml-1 mb-1.5 block">Billing Cycle</label>
                   <div className="grid grid-cols-2 gap-3">
-                    <label className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center gap-1 transition-all ${
-                      systemPaymentForm.billingCycle === 'monthly' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 text-slate-500 hover:border-slate-200 bg-white'
+                    <label className={`cursor-pointer border-2 rounded-lg p-2.5 flex flex-col items-center gap-1 transition-all ${
+                      systemPaymentForm.billingCycle === 'monthly' ? 'border-slate-900 bg-slate-50 text-slate-900 font-bold' : 'border-slate-200 text-slate-400 hover:border-slate-300 bg-white'
                     }`}>
                       <input type="radio" name="dashCycle" value="monthly" checked={systemPaymentForm.billingCycle === 'monthly'} onChange={handleSystemBillingCycleChange} className="hidden" />
-                      <span className="text-sm font-black uppercase tracking-wider">Monthly</span>
-                      <span className="text-xs font-bold opacity-70">{formatMoney(monthlyPrice)}</span>
+                      <span className="text-xs uppercase tracking-wider">Monthly</span>
+                      <span className="text-[10px] font-bold opacity-70">{formatMoney(monthlyPrice)}</span>
                     </label>
-                    <label className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center gap-1 transition-all ${
-                      systemPaymentForm.billingCycle === 'yearly' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 text-slate-500 hover:border-slate-200 bg-white'
+                    <label className={`cursor-pointer border-2 rounded-lg p-2.5 flex flex-col items-center gap-1 transition-all ${
+                      systemPaymentForm.billingCycle === 'yearly' ? 'border-slate-900 bg-slate-50 text-slate-900 font-bold' : 'border-slate-200 text-slate-400 hover:border-slate-300 bg-white'
                     }`}>
                       <input type="radio" name="dashCycle" value="yearly" checked={systemPaymentForm.billingCycle === 'yearly'} onChange={handleSystemBillingCycleChange} className="hidden" />
                       <div className="flex items-center gap-1">
-                        <span className="text-sm font-black uppercase tracking-wider">Yearly</span>
-                        {yearlyDiscount > 0 && <span className="bg-emerald-100 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded font-black">SAVE {formatMoney(yearlyDiscount)}</span>}
+                        <span className="text-xs uppercase tracking-wider">Yearly</span>
+                        {yearlyDiscount > 0 && <span className="bg-slate-900 text-white text-[8px] px-1 py-0.2 rounded font-black">SAVE {formatMoney(yearlyDiscount)}</span>}
                       </div>
-                      <span className="text-xs font-bold opacity-70">{formatMoney(yearlyPrice)}</span>
+                      <span className="text-[10px] font-bold opacity-70">{formatMoney(yearlyPrice)}</span>
                     </label>
                   </div>
                 </div>
 
                 {/* Start Month + End Month */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Start Month</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-slate-450 uppercase tracking-widest ml-1">Start Month</label>
                     <input
                       type="month"
-                      className="admin-input"
+                      className="admin-input !py-2 !text-xs"
                       value={systemPaymentForm.periodStart || ''}
                       onChange={(e) => handleSystemDateChange('periodStart', e.target.value)}
                       required
                     />
                   </div>
                   {systemPaymentForm.billingCycle === 'monthly' && (
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">End Month (Optional)</label>
+                    <div className="space-y-1.5">
+                      <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1">End Month (Optional)</label>
                       <input
                         type="month"
-                        className="admin-input"
+                        className="admin-input !py-2 !text-xs"
                         value={systemPaymentForm.periodEnd || ''}
                         onChange={(e) => handleSystemDateChange('periodEnd', e.target.value)}
                         min={systemPaymentForm.periodStart}
@@ -971,19 +978,19 @@ export default function Dashboard() {
                     </div>
                   )}
                   {systemPaymentForm.billingCycle === 'yearly' && (
-                    <div className="space-y-2 flex items-end">
-                      <div className="w-full h-[42px] flex items-center justify-center bg-blue-50 border border-blue-200 text-blue-600 rounded-xl font-bold text-[10px] uppercase tracking-widest">
+                    <div className="space-y-1.5 flex items-end">
+                      <div className="w-full h-9 flex items-center justify-center bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-bold text-[9px] uppercase tracking-widest">
                         12 Months
                       </div>
                     </div>
                   )}
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Payment Method</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1">Payment Method</label>
                     <select
-                      className="admin-input"
+                      className="admin-input !py-2 !text-xs"
                       value={systemPaymentForm.method}
                       onChange={(e) => setSystemPaymentForm(prev => ({ ...prev, method: e.target.value }))}
                     >
@@ -992,50 +999,91 @@ export default function Dashboard() {
                       <option value="cash">Direct Cash</option>
                     </select>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Amount to Pay</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1">Amount to Pay</label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">LKR</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[9px] font-black text-slate-400">LKR</span>
                       <input
                         type="number"
-                        className="admin-input !pl-12"
+                        className="admin-input !pl-12 !py-2 !text-xs"
                         placeholder="0.00"
                         value={systemPaymentForm.amount}
                         onChange={(e) => setSystemPaymentForm(prev => ({ ...prev, amount: e.target.value }))}
                       />
                     </div>
                   </div>
-                  <div className="md:col-span-2 space-y-2">
-                    <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest ml-1">Payment Note / Reference</label>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1">Payment Note / Reference</label>
                     <input
                       type="text"
-                      className="admin-input"
+                      className="admin-input !py-2 !text-xs"
                       placeholder="Transaction ID or Bank Reference"
                       value={systemPaymentForm.note}
                       onChange={(e) => setSystemPaymentForm(prev => ({ ...prev, note: e.target.value }))}
                     />
                   </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1">Payment Proof (Image or PDF)</label>
+                    <div className="flex items-center gap-2">
+                      <label className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-300 rounded-xl py-2 px-4 bg-white cursor-pointer hover:bg-slate-55 transition-colors">
+                        <div className="flex items-center gap-2 text-slate-500">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                          <span className="text-xs font-bold truncate max-w-[200px]">
+                            {systemPaymentForm.proofFileName || 'Select file (Image or PDF)'}
+                          </span>
+                        </div>
+                        <input
+                          type="file"
+                          accept="image/*,application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                setSystemPaymentForm(prev => ({
+                                  ...prev,
+                                  proofUrl: reader.result,
+                                  proofFileName: file.name
+                                }));
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                      {systemPaymentForm.proofUrl && (
+                        <button
+                          type="button"
+                          onClick={() => setSystemPaymentForm(prev => ({ ...prev, proofUrl: '', proofFileName: '' }))}
+                          className="p-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <div className="mt-6 space-y-4">
+                <div className="mt-4 space-y-4">
                   {/* Payment Breakdown Preview */}
-                  <div className="rounded-2xl p-4 bg-blue-50 border border-blue-200">
-                    <p className="text-[11px] font-black uppercase tracking-widest mb-3 text-blue-500">
-                      💳 Payment Breakdown
+                  <div className="rounded-xl p-3 bg-white border border-slate-200">
+                    <p className="text-[9px] font-black uppercase tracking-widest mb-2 text-slate-500">
+                      Payment Breakdown
                     </p>
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-sm">
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
                         <span className="text-slate-500">Base ({systemPaymentBreakdown.months} × {formatMoney(systemPaymentBreakdown.basePrice / (systemPaymentForm.billingCycle === 'yearly' ? 12 : 1))})</span>
                         <span className="font-bold text-slate-700">{formatMoney(systemPaymentBreakdown.basePrice)}</span>
                       </div>
                       {systemPaymentBreakdown.discount > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-emerald-600">Discount</span>
-                          <span className="font-bold text-emerald-600">- {formatMoney(systemPaymentBreakdown.discount)}</span>
+                        <div className="flex justify-between text-xs">
+                          <span className="text-slate-500 font-bold">Discount</span>
+                          <span className="font-bold text-slate-700">- {formatMoney(systemPaymentBreakdown.discount)}</span>
                         </div>
                       )}
-                      <div className="flex justify-between text-base font-black border-t border-blue-200 pt-2 mt-2">
+                      <div className="flex justify-between text-sm font-black border-t border-slate-200 pt-1.5 mt-1.5">
                         <span className="text-slate-800">Total</span>
-                        <span className="text-blue-600">{formatMoney(systemPaymentBreakdown.total)}</span>
+                        <span className="text-slate-900">{formatMoney(systemPaymentBreakdown.total)}</span>
                       </div>
                     </div>
                   </div>
@@ -1065,7 +1113,8 @@ export default function Dashboard() {
                           amount: '', 
                           method: 'bank', 
                           note: '', 
-                          proofUrl: '' 
+                          proofUrl: '',
+                          proofFileName: ''
                         });
                         await fetchSystemStatus();
                         showToast('Payment submitted for verification', 'success');
@@ -1076,7 +1125,7 @@ export default function Dashboard() {
                         setIsSubmittingSystemPayment(false);
                       }
                     }}
-                    className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-blue-100 hover:bg-blue-700 active:scale-[0.98] transition-all disabled:opacity-50"
+                    className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-xl font-bold uppercase tracking-widest text-[10px] shadow-sm transition-all disabled:opacity-50"
                   >
                     {isSubmittingSystemPayment ? 'Submitting...' : 'Submit Payment'}
                   </button>
@@ -1108,9 +1157,11 @@ export default function Dashboard() {
                       </div>
                       <div className="text-right">
                         <p className="text-xs font-black text-slate-900">{formatMoney(pay.amount)}</p>
-                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${pay.status === 'approved' ? 'bg-emerald-50 text-emerald-600' :
-                          pay.status === 'rejected' ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'
-                          }`}>
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${
+                          pay.status === 'approved' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                          pay.status === 'rejected' ? 'bg-rose-50 text-rose-700 border border-rose-100' : 
+                          'bg-amber-50 text-amber-700 border border-amber-100'
+                        }`}>
                           {pay.status}
                         </span>
                       </div>
@@ -1146,17 +1197,17 @@ export default function Dashboard() {
                         ({category.capacity})
                       </span>
                       <span className="text-[9px] md:text-xs font-black text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md">
-                        ${category.price}
+                        {formatMoney(category.price)}
                       </span>
                     </div>
                     <span className="text-[9px] md:text-[10px] font-black bg-emerald-50 text-emerald-600 px-2 py-1 rounded-md shrink-0">{category.rooms.length} FREE</span>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {category.rooms.map(num => {
-                      const isAC = parseInt(num) % 2 === 0; // Dummy logic for alternating AC status
+                    {category.rooms.map(roomObj => {
+                      const isAC = roomObj.hasAc === 1;
                       return (
-                        <div key={num} className="group/room relative bg-slate-50 border border-slate-100 px-4 py-2.5 rounded-xl text-sm font-black text-slate-600 hover:border-blue-300 hover:text-blue-600 cursor-pointer transition-all flex flex-col items-center min-w-[70px]">
-                          <span className="mb-0.5">{num}</span>
+                        <div key={roomObj.roomNumber} className="group/room relative bg-slate-50 border border-slate-100 px-4 py-2.5 rounded-xl text-sm font-black text-slate-600 hover:border-blue-300 hover:text-blue-600 cursor-pointer transition-all flex flex-col items-center min-w-[70px]">
+                          <span className="mb-0.5">{roomObj.roomNumber}</span>
                           <span className={`text-[7px] font-black uppercase tracking-widest px-1.5 py-0.5 rounded-md ${isAC ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-200 text-slate-500'}`}>
                             {isAC ? 'AC' : 'Non-AC'}
                           </span>
@@ -1311,8 +1362,8 @@ export default function Dashboard() {
                           )}
                           <p className="font-black text-slate-700 text-[10px] md:text-[11px] leading-tight">Rm {room.roomNumber}</p>
                         </div>
-                        <span className={`text-[6px] font-black uppercase px-1 rounded-sm ml-1 shrink-0 ${parseInt(room.roomNumber, 10) % 2 === 0 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
-                          {parseInt(room.roomNumber, 10) % 2 === 0 ? 'AC' : 'NAC'}
+                        <span className={`text-[6px] font-black uppercase px-1 rounded-sm ml-1 shrink-0 ${room.hasAc === 1 ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-400'}`}>
+                          {room.hasAc === 1 ? 'AC' : 'NAC'}
                         </span>
                       </div>
                       <p className="text-[8px] font-black text-slate-400 uppercase truncate mt-0.5">{room.roomType}</p>

@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 
@@ -49,16 +49,24 @@ export default function AdminLayout() {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [loggingOut, setLoggingOut] = useState(false)
 
   const handleLogout = async () => {
-    await logout()
-    navigate('/login')
+    setLoggingOut(true)
+    try {
+      await logout()
+      navigate('/login')
+    } catch (err) {
+      console.error(err)
+    } finally {
+      setLoggingOut(false)
+    }
   }
 
   return (
-    <div className="flex min-h-screen bg-slate-50 font-['Inter'] antialiased">
+    <div className="flex h-screen overflow-hidden bg-slate-50 font-['Inter'] antialiased">
       {/* Desktop Sidebar (Blue Theme) */}
-      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-blue-800 lg:bg-blue-900">
+      <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:h-full lg:flex-shrink-0 lg:border-r lg:border-blue-800 lg:bg-blue-900">
         <div className="flex h-16 items-center px-6">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white shadow-lg">
@@ -73,7 +81,7 @@ export default function AdminLayout() {
           </div>
         </div>
 
-        <nav className="flex-1 space-y-0.5 px-3 py-6">
+        <nav className="flex-1 overflow-y-auto space-y-0.5 px-3 py-6">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
@@ -105,18 +113,26 @@ export default function AdminLayout() {
           </div>
           <button
             onClick={handleLogout}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-blue-800 bg-blue-800/50 py-1.5 text-[13px] font-bold text-blue-200 transition-all hover:bg-blue-800 hover:text-white"
+            disabled={loggingOut}
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg border border-blue-800 bg-blue-800/50 py-1.5 text-[13px] font-bold text-blue-200 transition-all hover:bg-blue-800 hover:text-white disabled:opacity-50"
           >
-            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
-            Logout
+            {loggingOut ? (
+              <svg className="animate-spin h-3.5 w-3.5 text-blue-200" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            ) : (
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+            )}
+            {loggingOut ? 'Logging out...' : 'Logout'}
           </button>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-x-hidden pb-20 lg:pb-0">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden pb-20 lg:pb-0">
         {/* Mobile Header (White) */}
         <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-100 bg-white px-4 py-3 lg:hidden">
           <div className="flex items-center gap-2">

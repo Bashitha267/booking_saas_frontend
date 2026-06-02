@@ -26,6 +26,39 @@ export default function BookingDetails() {
   const [newPayment, setNewPayment] = useState({ method: 'cash', status: 'paid', amount: '' });
   const [paymentError, setPaymentError] = useState('');
   const [isRemovingPayment, setIsRemovingPayment] = useState(false);
+  const [paymentType, setPaymentType] = useState('advance'); // 'advance' or 'full'
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showRefundModal, setShowRefundModal] = useState(false);
+
+  const roomPrice = booking ? Number(booking.roomPrice || 0) : 0;
+  const nights = useMemo(() => {
+    if (!booking?.startDate || !booking?.endDate) return 1;
+    const diff = new Date(booking.endDate) - new Date(booking.startDate);
+    return Math.max(1, Math.round(diff / (1000 * 60 * 60 * 24)));
+  }, [booking?.startDate, booking?.endDate]);
+
+  const roomTotal = roomPrice * nights;
+  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+  const totalPaid = payments.filter(pay => pay.status !== 'refunded').reduce((sum, pay) => sum + pay.amount, 0);
+  const totalRefunded = payments.filter(pay => pay.status === 'refunded').reduce((sum, pay) => sum + pay.amount, 0);
+  const grandTotal = roomTotal + totalExpenses;
+  const balanceDue = grandTotal - totalPaid;
+
+  const currentPaymentStatus = useMemo(() => {
+    if (totalPaid === 0 && grandTotal === 0) return 'not paid';
+    if (totalPaid === 0) return 'not paid';
+    if (balanceDue <= 0) return 'paid';
+    return 'pending';
+  }, [totalPaid, balanceDue, grandTotal]);
+
+  // Effect to sync amount when paymentType is set to 'full'
+  useEffect(() => {
+    if (paymentType === 'full') {
+      setNewPayment((prev) => ({ ...prev, amount: String(Math.max(0, balanceDue)) }));
+    } else {
+      setNewPayment((prev) => ({ ...prev, amount: '' }));
+    }
+  }, [paymentType, balanceDue]);
 
   // Edit details states
   const [isEditingDetails, setIsEditingDetails] = useState(false);
@@ -45,18 +78,6 @@ export default function BookingDetails() {
 
   const [editingExpenseId, setEditingExpenseId] = useState(null);
   const [expenseDraft, setExpenseDraft] = useState({ description: '', amount: '' });
-
-  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const totalPaid = payments.reduce((sum, pay) => sum + pay.amount, 0);
-  const grandTotal = totalExpenses;
-  const balanceDue = grandTotal - totalPaid;
-
-  const currentPaymentStatus = useMemo(() => {
-    if (totalPaid === 0 && grandTotal === 0) return 'not paid';
-    if (totalPaid === 0) return 'not paid';
-    if (balanceDue <= 0) return 'paid';
-    return 'pending';
-  }, [totalPaid, balanceDue, grandTotal]);
 
   useEffect(() => {
     let isMounted = true;
@@ -94,6 +115,7 @@ export default function BookingDetails() {
           adults: bookingData.adults,
           children: bookingData.children,
           propertyId: bookingData.propertyId,
+          roomPrice: Number(bookingData.roomPrice || 0),
         };
 
         // Parse booking expenses from DB column
@@ -127,7 +149,9 @@ export default function BookingDetails() {
             method: pay.method || 'cash',
             status: pay.status || 'paid',
             date: (pay.paidAt || pay.createdAt || '').toString().slice(0, 10),
+            note: pay.note || '',
           }));
+
 
         if (isMounted) {
           setBooking(mappedBooking);
@@ -274,6 +298,7 @@ export default function BookingDetails() {
         amount: entered,
         method: newPayment.method,
         status: newPayment.status,
+        note: paymentType === 'advance' ? 'Advance Payment' : 'Full Payment',
       });
 
       const paymentsRes = await api.get('/payments');
@@ -286,10 +311,12 @@ export default function BookingDetails() {
           method: pay.method || 'cash',
           status: pay.status || 'paid',
           date: (pay.paidAt || pay.createdAt || '').toString().slice(0, 10),
+          note: pay.note || '',
         }));
 
       setPayments(bookingPayments);
       setNewPayment({ method: 'cash', status: 'paid', amount: '' });
+      setShowPaymentModal(false);
       showToast('Payment added successfully', 'success');
     } catch (err) {
       setPaymentError(err.response?.data?.message || 'Failed to add payment.');
@@ -308,6 +335,7 @@ export default function BookingDetails() {
         method: pay.method || 'cash',
         status: pay.status || 'paid',
         date: (pay.paidAt || pay.createdAt || '').toString().slice(0, 10),
+        note: pay.note || '',
       }));
     setPayments(bookingPayments);
   };
@@ -325,6 +353,16 @@ export default function BookingDetails() {
       showToast(error.response?.data?.message || 'Failed to remove payment', 'error');
     } finally {
       setIsRemovingPayment(false);
+    }
+  };
+
+  const handleUpdatePaymentStatus = async (paymentId, nextStatus) => {
+    try {
+      await api.put(`/payments/${paymentId}`, { status: nextStatus });
+      await refreshPayments(booking.id);
+      showToast(`Payment marked as ${nextStatus}`, 'success');
+    } catch (err) {
+      showToast(err.response?.data?.message || 'Failed to update payment status', 'error');
     }
   };
 
@@ -438,15 +476,46 @@ export default function BookingDetails() {
   }
 
   return (
-    <div className="p-4 md:p-8 bg-slate-50 min-h-screen text-slate-800 font-sans pb-24">
+    <div className="p-4 md:p-8 bg-white min-h-screen text-slate-800 font-sans pb-24 relative overflow-hidden">
       <ToastComponent />
       
+      <style>{`
+        @media print {
+          .no-print, .no-print * {
+            display: none !important;
+          }
+          * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          fieldset {
+            page-break-inside: avoid;
+            border-color: #cbd5e1 !important;
+          }
+        }
+      `}</style>
+
+      {/* Background Watermark */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none select-none z-0">
+        <span className={`text-[16vw] font-black uppercase tracking-widest opacity-[0.08] -rotate-12 ${
+          booking.status === 'cancelled' ? 'text-red-600' :
+          currentPaymentStatus === 'paid' ? 'text-emerald-600' :
+          currentPaymentStatus === 'pending' ? 'text-blue-600' :
+          'text-rose-600'
+        }`}>
+          {booking.status === 'cancelled' ? 'CANCELLED' :
+           currentPaymentStatus === 'paid' ? 'PAID' :
+           currentPaymentStatus === 'pending' ? 'PENDING' :
+           'UNPAID'}
+        </span>
+      </div>
+      
       {/* Back Button & Main Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-2 border-b border-slate-200/60">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 pb-4 border-b border-slate-300 mb-8 relative z-10">
         <div>
           <button 
             onClick={() => navigate(-1)} 
-            className="flex items-center gap-1.5 text-slate-400 hover:text-slate-700 transition-colors font-bold text-[10px] uppercase tracking-widest mb-3"
+            className="flex items-center gap-1.5 text-slate-500 hover:text-blue-600 transition-colors font-bold text-[10px] uppercase tracking-widest mb-3 no-print"
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7" />
@@ -454,13 +523,13 @@ export default function BookingDetails() {
             Back to Bookings
           </button>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl md:text-3xl font-black text-slate-800 tracking-tight leading-none">Booking #00{booking.id}</h1>
-            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${
-              booking.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/10' :
-              booking.status === 'pending' ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/10' : 
-              booking.status === 'checked-in' ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/10' : 
-              booking.status === 'checked-out' ? 'bg-slate-100 text-slate-700 ring-1 ring-slate-600/10' : 
-              'bg-rose-50 text-rose-700 ring-1 ring-rose-600/10'
+            <h1 className="text-xl md:text-2xl font-black text-slate-900 tracking-tight leading-none">Booking #00{booking.id}</h1>
+            <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border ${
+              booking.status === 'confirmed' ? 'bg-blue-50 border-blue-200 text-blue-800' :
+              booking.status === 'pending' ? 'bg-slate-50 border-slate-300 text-slate-700' : 
+              booking.status === 'checked-in' ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 
+              booking.status === 'checked-out' ? 'bg-slate-100 border-slate-400 text-slate-800' : 
+              'bg-red-50 border-red-200 text-red-800'
             }`}>
               {booking.status}
             </span>
@@ -468,7 +537,7 @@ export default function BookingDetails() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 no-print">
           <select 
             value={isEditingDetails ? editForm.status : booking.status}
             onChange={(e) => {
@@ -478,7 +547,7 @@ export default function BookingDetails() {
                 handleStatusChange(e.target.value);
               }
             }}
-            className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-black text-slate-700 outline-none shadow-sm focus:border-blue-500"
+            className="bg-white border border-slate-300 rounded px-3 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-blue-600"
           >
             <option value="pending">Mark as Pending</option>
             <option value="confirmed">Mark as Confirmed</option>
@@ -490,522 +559,789 @@ export default function BookingDetails() {
             <>
               <button
                 onClick={handleSaveDetails}
-                className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-black shadow-lg hover:bg-emerald-700 transition-all active:scale-95"
+                className="border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white px-4 py-1.5 rounded text-xs font-bold transition-all active:scale-95"
               >
                 Save Details
               </button>
               <button
                 onClick={handleCancelEditDetails}
-                className="bg-slate-200 text-slate-700 px-5 py-2.5 rounded-xl text-xs font-black hover:bg-slate-300 transition-all active:scale-95"
+                className="border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-1.5 rounded text-xs font-bold transition-all active:scale-95"
               >
                 Cancel
               </button>
             </>
           ) : (
-            <button
-              onClick={startEditDetails}
-              className="bg-white text-slate-700 px-5 py-2.5 rounded-xl text-xs font-black border border-slate-200 hover:border-slate-300 hover:bg-slate-50 transition-all active:scale-95 shadow-sm"
-            >
-              Edit Booking
-            </button>
+            <>
+              <button
+                onClick={() => window.open(`/hotel/bookings/${booking.id}/invoice`, '_blank')}
+                className="border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 px-4 py-1.5 rounded text-xs font-bold transition-all active:scale-95 flex items-center gap-1.5"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Download Invoice
+              </button>
+              <button
+                onClick={startEditDetails}
+                className="border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 px-4 py-1.5 rounded text-xs font-bold transition-all active:scale-95"
+              >
+                Edit Booking
+              </button>
+            </>
           )}
           
           {detailsMessage.message && (
-            <span className={`text-[10px] font-black uppercase tracking-widest ${detailsMessage.type === 'error' ? 'text-rose-500' : 'text-emerald-600'}`}>
+            <span className={`text-[10px] font-bold uppercase tracking-widest ${detailsMessage.type === 'error' ? 'text-red-650' : 'text-emerald-700'}`}>
               {detailsMessage.message}
             </span>
           )}
         </div>
       </div>
 
-      {/* Main content grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Column: Profile & Stay details & Additional Charges */}
-        <div className="lg:col-span-8 space-y-8">
+      <div className="space-y-8 max-w-5xl mx-auto relative z-10">
+        
+        {/* Fieldset 1: Booking Information */}
+        <fieldset className="border border-slate-300 p-6 rounded-md bg-white">
+          <legend className="px-2 text-sm font-bold text-blue-600 uppercase tracking-wide">Booking Information</legend>
           
-          {/* Guest Profile and Stay Layout */}
-          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100">
-            <div className="grid md:grid-cols-2 gap-8">
-              {/* Guest metadata */}
-              <div>
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] mb-4">Guest Profile</p>
-                {isEditingDetails ? (
-                  <input
-                    type="text"
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-sm font-black text-slate-800 outline-none"
-                    value={editForm.guestName}
-                    onChange={handleEditChange('guestName')}
-                  />
-                ) : (
-                  <h3 className="text-lg font-black text-slate-800">{booking.guestName}</h3>
-                )}
-                
-                <div className="mt-5 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Contact Number</p>
-                      {isEditingDetails ? (
-                        <input
-                          type="text"
-                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-                          value={editForm.guestContact}
-                          onChange={handleEditChange('guestContact')}
-                        />
-                      ) : (
-                        <p className="text-xs font-bold text-slate-700">{booking.guestPhone}</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">NIC / Passport</p>
-                      {isEditingDetails ? (
-                        <input
-                          type="text"
-                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-                          value={editForm.guestNic}
-                          onChange={handleEditChange('guestNic')}
-                        />
-                      ) : (
-                        <p className="text-xs font-bold text-slate-700">{booking.nicPassport || 'N/A'}</p>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Origin Country</p>
-                      {isEditingDetails ? (
-                        <input
-                          type="text"
-                          className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-                          value={editForm.country}
-                          onChange={handleEditChange('country')}
-                        />
-                      ) : (
-                        <p className="text-xs font-bold text-slate-700">{booking.country || 'N/A'}</p>
-                      )}
-                    </div>
-                    <div>
-                      <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Email Reference</p>
-                      <p className="text-xs font-bold text-slate-700">{booking.guestEmail}</p>
-                    </div>
-                  </div>
-
-                  <div>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Home Address</p>
-                    {isEditingDetails ? (
-                      <textarea
-                        rows="2"
-                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none"
-                        value={editForm.address}
-                        onChange={handleEditChange('address')}
-                      />
-                    ) : (
-                      <p className="text-xs font-semibold text-slate-500 leading-relaxed">{booking.address || 'Not specified'}</p>
-                    )}
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {/* Left Column: Guest Profile */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-1">Guest Profile</h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Guest Name</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="text"
+                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                      value={editForm.guestName}
+                      onChange={handleEditChange('guestName')}
+                    />
+                  ) : (
+                    <p className="text-sm font-bold text-slate-800">{booking.guestName}</p>
+                  )}
                 </div>
-
-                {/* Occupancy counts */}
-                <div className="mt-6 flex items-center gap-3">
-                  <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm">
-                    <span className="text-[10px] font-black text-slate-400 uppercase">Adults:</span>
-                    {isEditingDetails ? (
-                      <input
-                        type="number"
-                        min="1"
-                        className="w-14 bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs font-black text-slate-700 outline-none"
-                        value={editForm.adults}
-                        onChange={handleEditChange('adults')}
-                      />
-                    ) : (
-                      <span className="text-xs font-black text-slate-700">{booking.adults || booking.guestCount}</span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 shadow-sm">
-                    <span className="text-[10px] font-black text-slate-400 uppercase">Children:</span>
-                    {isEditingDetails ? (
-                      <input
-                        type="number"
-                        min="0"
-                        className="w-14 bg-white border border-slate-200 rounded-lg px-2 py-0.5 text-xs font-black text-slate-700 outline-none"
-                        value={editForm.children}
-                        onChange={handleEditChange('children')}
-                      />
-                    ) : (
-                      <span className="text-xs font-black text-slate-700">{booking.children || 0}</span>
-                    )}
-                  </div>
+                
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Contact Number</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="text"
+                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                      value={editForm.guestContact}
+                      onChange={handleEditChange('guestContact')}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-700">{booking.guestPhone}</p>
+                  )}
                 </div>
               </div>
 
-              {/* Room details */}
-              <div className="md:border-l md:pl-8 border-slate-100">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.15em] mb-4">Reservation Details</p>
-                <div className="grid grid-cols-2 gap-y-6">
-                  <div>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Assigned Room</p>
-                    <p className="text-base font-black text-slate-800">Room {booking.roomNumber}</p>
-                    <p className="text-[9px] font-black text-blue-600 uppercase tracking-widest mt-0.5">{booking.roomType}</p>
-                  </div>
-                  <div>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Check-in Date</p>
-                    {isEditingDetails ? (
-                      <input
-                        type="date"
-                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-black text-slate-700 outline-none"
-                        value={editForm.checkInDate}
-                        onChange={handleEditChange('checkInDate')}
-                      />
-                    ) : (
-                      <p className="text-sm font-black text-slate-700">{booking.startDate?.split('T')[0]}</p>
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-wider">Check-out Date</p>
-                    {isEditingDetails ? (
-                      <input
-                        type="date"
-                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-xs font-black text-slate-700 outline-none"
-                        value={editForm.checkOutDate}
-                        onChange={handleEditChange('checkOutDate')}
-                      />
-                    ) : (
-                      <p className="text-sm font-black text-slate-700">{booking.endDate?.split('T')[0]}</p>
-                    )}
-                  </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">NIC / Passport</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="text"
+                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                      value={editForm.guestNic}
+                      onChange={handleEditChange('guestNic')}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-700">{booking.nicPassport || 'N/A'}</p>
+                  )}
+                </div>
+                
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Origin Country</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="text"
+                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                      value={editForm.country}
+                      onChange={handleEditChange('country')}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-700">{booking.country || 'N/A'}</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Home Address</label>
+                {isEditingDetails ? (
+                  <textarea
+                    rows="2"
+                    className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                    value={editForm.address}
+                    onChange={handleEditChange('address')}
+                  />
+                ) : (
+                  <p className="text-sm text-slate-600 leading-relaxed">{booking.address || 'Not specified'}</p>
+                )}
+              </div>
+
+              <div className="flex gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Adults</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="number"
+                      min="1"
+                      className="w-20 border border-slate-300 rounded px-3 py-1 text-sm outline-none focus:border-blue-600"
+                      value={editForm.adults}
+                      onChange={handleEditChange('adults')}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-700">{booking.adults}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Children</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="number"
+                      min="0"
+                      className="w-20 border border-slate-300 rounded px-3 py-1 text-sm outline-none focus:border-blue-600"
+                      value={editForm.children}
+                      onChange={handleEditChange('children')}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-700">{booking.children}</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Reservation Details */}
+            <div className="space-y-4 md:border-l md:pl-6 border-slate-200">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-1">Reservation Details</h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Assigned Room</label>
+                  <p className="text-sm font-bold text-slate-800">Room {booking.roomNumber}</p>
+                  <span className="text-[10px] font-bold text-blue-600 uppercase">{booking.roomType}</span>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Email Reference</label>
+                  <p className="text-sm text-slate-700">{booking.guestEmail}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Check-in Date</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="date"
+                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                      value={editForm.checkInDate}
+                      onChange={handleEditChange('checkInDate')}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-700">{booking.startDate?.split('T')[0]}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Check-out Date</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="date"
+                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                      value={editForm.checkOutDate}
+                      onChange={handleEditChange('checkOutDate')}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-slate-700">{booking.endDate?.split('T')[0]}</p>
+                  )}
                 </div>
               </div>
             </div>
           </div>
+        </fieldset>
 
-          {/* Quick Expense Buttons & Roster Section */}
-          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6">
-            <div className="flex items-center justify-between border-b border-slate-50 pb-4">
-              <div>
-                <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest">Extra Charges & Expenses</h3>
-                <p className="text-xs text-slate-400 mt-0.5 font-medium">Record room service, amenities, and extra activities.</p>
+        {/* Fieldset 2: Costs & Extra Charges */}
+        <fieldset className="border border-slate-300 p-6 rounded-md bg-white">
+          <legend className="px-2 text-sm font-bold text-blue-600 uppercase tracking-wide">Costs & Extra Charges</legend>
+
+          {/* Quick Charge Buttons */}
+          {quickCharges.length > 0 && (
+            <div className="mb-4 no-print">
+              <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Quick Charge Shortcuts</h4>
+              <div className="flex flex-wrap gap-2">
+                {quickCharges.map((qc) => (
+                  <button
+                    key={qc.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedQuickCharge(qc);
+                      setQuickChargeAmount(String(qc.amount));
+                    }}
+                    className="border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold px-3 py-1.5 rounded transition-all"
+                  >
+                    + {qc.name} (Rs. {qc.amount})
+                  </button>
+                ))}
               </div>
-              <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
-                {expenses.length} Added
-              </span>
             </div>
+          )}
 
-            {/* Configured Quick Charge Buttons */}
-            {quickCharges.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider ml-1">Quick Charge Shortcuts</p>
-                <div className="flex flex-wrap gap-2.5">
-                  {quickCharges.map((qc) => (
-                    <button
-                      key={qc.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedQuickCharge(qc);
-                        setQuickChargeAmount(String(qc.amount));
-                      }}
-                      className="group flex items-center justify-between gap-3 bg-violet-50/50 hover:bg-violet-50 border border-violet-100 hover:border-violet-200 px-4 py-2 rounded-2xl text-left transition-all active:scale-95 shadow-sm"
-                    >
-                      <div>
-                        <p className="text-xs font-bold text-slate-800 group-hover:text-violet-700 transition-colors">{qc.name}</p>
-                        <p className="text-[9px] font-bold text-violet-500">Rs. {qc.amount}</p>
-                      </div>
-                      <div className="h-6 w-6 rounded-lg bg-violet-600 text-white flex items-center justify-center font-bold text-xs shadow shadow-violet-100">
-                        +
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* List of active expenses */}
-            <div className="space-y-3">
-              {expenses.map((exp) => (
-                <div key={exp.id} className="p-4 rounded-2xl bg-slate-50/50 border border-slate-50 flex flex-col gap-3 group transition-all hover:border-slate-100">
-                  {editingExpenseId === exp.id ? (
-                    <div className="space-y-3">
-                      <div className="flex flex-col sm:flex-row gap-2">
+          {/* Charges Table */}
+          <div className="mb-4 overflow-x-auto">
+            <table className="w-full border-collapse border border-slate-200 text-left text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="p-3 font-bold text-slate-600 uppercase">Description</th>
+                  <th className="p-3 font-bold text-slate-600 uppercase">Date</th>
+                  <th className="p-3 font-bold text-slate-600 text-right uppercase">Amount</th>
+                  <th className="p-3 font-bold text-slate-600 text-right uppercase no-print">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expenses.map((exp) => (
+                  <tr key={exp.id} className="border-b border-slate-200 hover:bg-slate-50/50">
+                    <td className="p-3 font-medium text-slate-800">
+                      {editingExpenseId === exp.id ? (
                         <input
                           type="text"
-                          className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                          className="border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-600 w-full"
                           value={expenseDraft.description}
                           onChange={(e) => setExpenseDraft((prev) => ({ ...prev, description: e.target.value }))}
                         />
+                      ) : (
+                        exp.description
+                      )}
+                    </td>
+                    <td className="p-3 text-slate-500">{exp.date}</td>
+                    <td className="p-3 text-right font-bold text-slate-800">
+                      {editingExpenseId === exp.id ? (
                         <input
                           type="number"
                           step="0.01"
-                          className="w-28 bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-blue-500"
+                          className="border border-slate-300 rounded px-2 py-1 text-xs outline-none focus:border-blue-600 w-24 text-right"
                           value={expenseDraft.amount}
                           onChange={(e) => setExpenseDraft((prev) => ({ ...prev, amount: e.target.value }))}
                         />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => handleSaveExpense(exp.id)}
-                          className="bg-slate-950 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider"
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleCancelEditExpense}
-                          className="bg-white text-slate-500 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider border border-slate-200"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${exp.isQuickCharge ? 'bg-violet-50 text-violet-600' : 'bg-blue-50 text-blue-600'}`}>
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                          </svg>
+                      ) : (
+                        `Rs. ${exp.amount.toFixed(2)}`
+                      )}
+                    </td>
+                    <td className="p-3 text-right no-print">
+                      {editingExpenseId === exp.id ? (
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => handleSaveExpense(exp.id)}
+                            className="text-xs text-blue-600 hover:underline font-bold"
+                          >
+                            Save
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditExpense}
+                            className="text-xs text-slate-500 hover:underline"
+                          >
+                            Cancel
+                          </button>
                         </div>
-                        <div>
-                          <p className="text-xs font-black text-slate-700">{exp.description}</p>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider mt-0.5">{exp.date}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <p className="text-sm font-black text-slate-800">Rs. {exp.amount.toFixed(2)}</p>
-                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      ) : (
+                        <div className="flex justify-end gap-3">
                           <button
                             type="button"
                             onClick={() => handleStartEditExpense(exp)}
-                            className="text-[9px] font-bold uppercase tracking-widest text-slate-400 hover:text-blue-600"
+                            className="text-xs text-blue-600 hover:underline"
                           >
                             Edit
                           </button>
                           <button
                             type="button"
                             onClick={() => handleRemoveExpense(exp.id)}
-                            className="text-[9px] font-bold uppercase tracking-widest text-rose-400 hover:text-rose-600"
+                            className="text-xs text-red-650 hover:underline"
                           >
                             Delete
                           </button>
                         </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {expenses.length === 0 && (
-                <p className="text-center py-10 text-xs text-slate-400 font-bold uppercase tracking-wider border border-dashed border-slate-100 rounded-2xl bg-slate-50/20">
-                  No extra charges added.
-                </p>
-              )}
-            </div>
-
-            {/* Custom Expense Form */}
-            <form onSubmit={handleAddExpense} className="flex flex-col sm:flex-row gap-3 pt-4 border-t border-slate-50">
-              <input 
-                type="text" 
-                required
-                placeholder="Custom Charge Description (e.g. Spa Treatment)" 
-                className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:bg-white focus:border-blue-500"
-                value={newExpense.description}
-                onChange={e => setNewExpense({...newExpense, description: e.target.value})}
-              />
-              <input 
-                type="number" 
-                required
-                step="0.01"
-                placeholder="Amount (Rs.)" 
-                className="w-full sm:w-32 bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:bg-white focus:border-blue-500"
-                value={newExpense.amount}
-                onChange={e => setNewExpense({...newExpense, amount: e.target.value})}
-              />
-              <button className="bg-slate-900 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-600 transition-colors">
-                Add Charge
-              </button>
-            </form>
-            
-            {expenseError && (
-              <p className="text-xs text-rose-600 font-bold">{expenseError}</p>
-            )}
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {expenses.length === 0 && (
+                  <tr>
+                    <td colSpan="4" className="p-6 text-center text-slate-400 font-bold uppercase tracking-wider">
+                      No extra charges added.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
-        </div>
 
-        {/* Right Column: Billing Statistics & Payments */}
-        <div className="lg:col-span-4 space-y-8">
+          {/* Custom Add Expense Form */}
+          <form onSubmit={handleAddExpense} className="flex flex-col sm:flex-row gap-2 items-center no-print">
+            <input 
+              type="text" 
+              required
+              placeholder="Custom Charge Description (e.g. Spa Treatment)" 
+              className="flex-1 border border-slate-300 rounded px-3 py-1.5 text-xs outline-none focus:border-blue-600 w-full"
+              value={newExpense.description}
+              onChange={e => setNewExpense({...newExpense, description: e.target.value})}
+            />
+            <input 
+              type="number" 
+              required
+              step="0.01"
+              placeholder="Amount (Rs.)" 
+              className="w-full sm:w-28 border border-slate-300 rounded px-3 py-1.5 text-xs outline-none focus:border-blue-600"
+              value={newExpense.amount}
+              onChange={e => setNewExpense({...newExpense, amount: e.target.value})}
+            />
+            <button className="border border-blue-600 bg-blue-600 text-white hover:bg-blue-700 px-4 py-1.5 rounded text-xs font-bold whitespace-nowrap transition-colors w-full sm:w-auto">
+              Add Charge
+            </button>
+          </form>
+          {expenseError && (
+            <p className="text-xs text-red-650 font-bold mt-2">{expenseError}</p>
+          )}
+        </fieldset>
+
+        {/* Fieldset 3: Financial Summary & Ledger */}
+        <fieldset className="border border-slate-300 p-6 rounded-md bg-white">
+          <legend className="px-2 text-sm font-bold text-blue-600 uppercase tracking-wide">Financial Summary & Ledger</legend>
           
-          {/* Payment Roster Card */}
-          <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-slate-100 space-y-6">
-            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50 pb-3">Payment Ledger</h3>
+          <div className="space-y-6">
             
-            <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
-              {payments.map(pay => (
-                <div key={pay.id} className="relative p-3 rounded-2xl bg-emerald-50/20 border border-emerald-50/60 flex items-center justify-between group">
-                  <button
-                    type="button"
-                    onClick={() => handleRemovePayment(pay.id)}
-                    disabled={isRemovingPayment}
-                    className="absolute -top-1.5 -right-1.5 w-6 h-6 rounded-full border border-emerald-100 bg-white text-emerald-500 shadow flex items-center justify-center hover:bg-rose-50 hover:border-rose-100 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-50"
-                  >
-                    ×
-                  </button>
-                  <div>
-                    <p className="text-[10px] font-black text-emerald-700 leading-tight uppercase tracking-wider">
-                      {pay.method} · {pay.status}
-                    </p>
-                    <p className="text-[8px] text-emerald-600/70 font-black uppercase tracking-tight mt-0.5">{pay.date}</p>
-                  </div>
-                  <p className="text-xs font-black text-emerald-700 tracking-tighter">+Rs. {pay.amount.toFixed(2)}</p>
+            {/* 1. Cost & Summary Breakdown */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-1">Cost Breakdown</h3>
+              <div className="w-full space-y-2 text-xs font-medium text-slate-700">
+                {/* Room Charge Row */}
+                <div className="flex justify-between items-center py-1">
+                  <span>Room Stay Charge (Room {booking.roomNumber} · {nights} {nights === 1 ? 'night' : 'nights'} × Rs. {roomPrice.toFixed(2)})</span>
+                  <span className="font-semibold text-slate-900">Rs. {roomTotal.toFixed(2)}</span>
                 </div>
-              ))}
-              {payments.length === 0 && (
-                <p className="text-center py-6 text-[10px] text-slate-300 font-bold uppercase tracking-widest italic">
-                  No Payments Posted
-                </p>
-              )}
-            </div>
 
-            {/* Post payment form */}
-            <form onSubmit={handleAddPayment} className="space-y-4 pt-4 border-t border-slate-50">
-              <div className="grid grid-cols-2 gap-2">
-                <select
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-blue-500"
-                  value={newPayment.method}
-                  onChange={e => setNewPayment({ ...newPayment, method: e.target.value })}
-                >
-                  <option value="cash">Cash Payment</option>
-                  <option value="card">Card Payment</option>
-                  <option value="bank">Bank Transfer</option>
-                  <option value="online">Online Link</option>
-                </select>
-                <select
-                  className="w-full bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold outline-none focus:border-blue-500"
-                  value={newPayment.status}
-                  onChange={e => setNewPayment({ ...newPayment, status: e.target.value })}
-                >
-                  <option value="paid">Paid</option>
-                  <option value="pending">Pending</option>
-                </select>
-              </div>
+                {/* Extra Charges Row */}
+                <div className="flex justify-between items-center py-1">
+                  <span>Extra Charges & Expenses ({expenses.length} configured)</span>
+                  <span className="font-semibold text-slate-900">Rs. {totalExpenses.toFixed(2)}</span>
+                </div>
 
-              {/* Outstanding Hint */}
-              {grandTotal > 0 && (
-                <div className="bg-slate-50 p-3 rounded-2xl flex items-center justify-between text-[10px] uppercase tracking-wider font-bold">
-                  <span className="text-slate-400">Balance Outstanding:</span>
-                  <span className={balanceDue <= 0 ? 'text-emerald-600' : 'text-amber-600'}>
+                {/* Single line above Grand Total */}
+                <div className="border-t border-slate-350 my-2"></div>
+
+                {/* Grand Total Row */}
+                <div className="flex justify-between items-center py-1 font-bold text-slate-900">
+                  <span className="uppercase text-[10px] tracking-wider">Grand Total</span>
+                  <span className="text-sm font-black">Rs. {grandTotal.toFixed(2)}</span>
+                </div>
+
+                {/* Total Paid Row */}
+                <div className="flex justify-between items-center py-1 text-slate-800 font-bold text-sm">
+                  <span>Total Paid (Ledger)</span>
+                  <span className="text-emerald-700 text-base font-black">Rs. {totalPaid.toFixed(2)}</span>
+                </div>
+
+                {/* Total Refunded Row */}
+                {totalRefunded > 0 && (
+                  <div className="flex justify-between items-center py-1 text-red-600 font-bold text-sm">
+                    <span>Total Refunded</span>
+                    <span className="text-red-600 text-base font-black line-through">Rs. {totalRefunded.toFixed(2)}</span>
+                  </div>
+                )}
+
+                {/* Single line above Balance Due */}
+                <div className="border-t border-slate-350 my-2"></div>
+
+                {/* Balance Due Row */}
+                <div className={`flex justify-between items-center py-1.5 font-bold ${balanceDue > 0 ? 'text-red-900' : 'text-emerald-800'}`}>
+                  <span className="uppercase text-[10px] tracking-wider">Balance Due</span>
+                  <span className="text-base font-black border-b-[3px] border-double border-current pb-0.5">
                     Rs. {Math.max(0, balanceDue).toFixed(2)}
                   </span>
                 </div>
-              )}
+              </div>
+            </div>
+
+            {/* 2. Transaction Log / Payments History */}
+            <div className="space-y-3 pt-2">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-1">Payment Transactions</h3>
+              
+              <div className="overflow-x-auto border border-slate-200 rounded">
+                <table className="w-full border-collapse text-left text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200">
+                      <th className="p-3 font-bold text-slate-600 uppercase">Payment Method</th>
+                      <th className="p-3 font-bold text-slate-600 uppercase">Date</th>
+                      <th className="p-3 font-bold text-slate-600 uppercase">Status</th>
+                      <th className="p-3 font-bold text-slate-600 text-right uppercase">Amount</th>
+                      <th className="p-3 font-bold text-slate-600 text-right uppercase no-print">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {payments.map((pay) => (
+                      <tr key={pay.id} className="border-b border-slate-200 last:border-0 hover:bg-slate-50/50">
+                        <td className="p-3">
+                          <div className="flex flex-col gap-1">
+                            <span className="font-bold text-slate-800 uppercase tracking-wide">{pay.method}</span>
+                            <span className={`inline-block w-fit px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider border ${
+                              pay.note === 'Advance Payment' 
+                                ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                                : pay.note === 'Full Payment'
+                                ? 'bg-slate-50 text-slate-700 border-slate-300'
+                                : 'bg-slate-50 text-slate-400 border-slate-200 italic'
+                            }`}>
+                              {pay.note || 'General Payment'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="p-3 text-slate-500">{pay.date}</td>
+                        <td className="p-3">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                            pay.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                            pay.status === 'refunded' ? 'bg-red-50 text-red-700 border-red-200' :
+                            'bg-amber-50 text-amber-700 border-amber-100'
+                          }`}>
+                            {pay.status}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right font-bold">
+                          {pay.status === 'refunded' ? (
+                            <span className="text-red-600 line-through">Rs. {pay.amount.toFixed(2)}</span>
+                          ) : (
+                            <span className="text-emerald-700">+Rs. {pay.amount.toFixed(2)}</span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right no-print space-x-3">
+                          {booking.status === 'cancelled' && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdatePaymentStatus(pay.id, pay.status === 'refunded' ? 'paid' : 'refunded')}
+                              className={`text-xs font-bold hover:underline ${
+                                pay.status === 'refunded' ? 'text-emerald-700' : 'text-amber-700'
+                              }`}
+                            >
+                              {pay.status === 'refunded' ? 'Mark Paid' : 'Refund'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePayment(pay.id)}
+                            disabled={isRemovingPayment}
+                            className="text-xs text-red-650 hover:underline font-bold disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {payments.length === 0 && (
+                      <tr>
+                        <td colSpan="5" className="p-6 text-center text-slate-400 font-bold uppercase tracking-wider">
+                          No payments posted yet.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* 3. Action Panel: Settlement Badge & Add Payment Button */}
+            <div className="pt-4 border-t border-slate-200 flex items-center justify-between flex-wrap gap-4 no-print">
+              <div className="flex items-center gap-4">
+                <span className="text-[10px] font-bold uppercase text-slate-500">Settlement Status</span>
+                <span className={`px-2.5 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                  currentPaymentStatus === 'paid' ? 'bg-emerald-50 border-emerald-200 text-emerald-700' :
+                  currentPaymentStatus === 'pending' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+                  'bg-red-50 border-red-200 text-red-700'
+                }`}>
+                  {currentPaymentStatus}
+                </span>
+              </div>
 
               <div className="flex gap-2">
-                <input
-                  type="number"
-                  placeholder="Amount"
-                  min="0.01"
-                  step="0.01"
-                  max={grandTotal > 0 ? Math.max(0, balanceDue) : undefined}
-                  className={`flex-1 bg-slate-50 border rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:bg-white ${
-                    paymentError ? 'border-rose-300 bg-rose-50' : 'border-slate-100 focus:border-emerald-500'
-                  }`}
-                  value={newPayment.amount}
-                  onChange={e => {
-                    setPaymentError('');
-                    setNewPayment({ ...newPayment, amount: e.target.value });
-                  }}
-                />
+                {booking.status === 'cancelled' && payments.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowRefundModal(true)}
+                    className="border border-red-600 bg-white hover:bg-red-50 text-red-600 font-bold text-xs uppercase px-4 py-2 rounded transition-all flex items-center gap-1.5"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M16 15v-6a4 4 0 00-8 0v6m-4 0h16" />
+                    </svg>
+                    Refund Payments
+                  </button>
+                )}
+
                 <button
-                  type="submit"
-                  disabled={grandTotal > 0 && balanceDue <= 0}
-                  className="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-emerald-700 transition-colors shadow-md shadow-emerald-100 disabled:opacity-40 disabled:cursor-not-allowed"
+                  type="button"
+                  disabled={booking.status === 'cancelled'}
+                  onClick={() => {
+                    setPaymentError('');
+                    setShowPaymentModal(true);
+                  }}
+                  className="border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase px-4 py-2 rounded transition-all flex items-center gap-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  Post Pay
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" />
+                  </svg>
+                  Add Payment
                 </button>
               </div>
-
-              {/* Overpayment Warning banner */}
-              {paymentError && (
-                <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 rounded-2xl p-3">
-                  <span className="text-rose-600 text-xs">⚠</span>
-                  <p className="text-[10px] font-black text-rose-600 uppercase tracking-wide leading-tight">{paymentError}</p>
-                </div>
-              )}
-            </form>
-          </div>
-
-          {/* Financial Overview card */}
-          <div className="bg-slate-900 p-6 md:p-8 rounded-3xl text-white shadow-xl shadow-slate-900/10 space-y-6">
-            <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em]">Financial Summary</h3>
-            
-            <div className="space-y-4">
-              <div className="flex justify-between items-center text-slate-400 font-bold text-xs uppercase tracking-wider">
-                <span>Extra Charges Total</span>
-                <span>Rs. {totalExpenses.toFixed(2)}</span>
-              </div>
-              <div className="pt-4 border-t border-white/5 flex justify-between items-center">
-                <span className="text-xs font-black uppercase tracking-wider text-slate-300">Grand Total</span>
-                <span className="text-xl font-black tracking-tight">Rs. {grandTotal.toFixed(2)}</span>
-              </div>
-              
-              <div className="mt-4 p-4 bg-white/5 rounded-2xl border border-white/10 space-y-3">
-                <div className="flex justify-between items-center text-[10px] uppercase tracking-wider">
-                  <span className="text-slate-400">Total Payments:</span>
-                  <span className="text-emerald-400 font-black">Rs. {totalPaid.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-white/5">
-                  <span className="text-xs font-black uppercase tracking-widest text-slate-200">Balance Due:</span>
-                  <span className={`text-lg font-black ${balanceDue <= 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                    Rs. {Math.max(0, balanceDue).toFixed(2)}
-                  </span>
-                </div>
-              </div>
             </div>
 
-            <div className="pt-4 flex flex-col gap-2">
-              <span className={`text-center py-2.5 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] border ${
-                currentPaymentStatus === 'paid' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' :
-                currentPaymentStatus === 'pending' ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' :
-                'bg-rose-500/10 border-rose-500/30 text-rose-400'
-              }`}>
-                {currentPaymentStatus}
-              </span>
-            </div>
           </div>
-        </div>
+        </fieldset>
       </div>
 
       {/* Quick Add Custom Modal popup */}
       {selectedQuickCharge && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl animate-in fade-in zoom-in duration-200">
-            <h3 className="text-base font-black text-slate-800 mb-1">Add Quick Charge</h3>
-            <p className="text-slate-400 text-[11px] mb-4">Confirm or adjust the amount for <strong className="text-slate-600">"{selectedQuickCharge.name}"</strong></p>
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm bg-white rounded p-6 shadow-xl border border-slate-300">
+            <h3 className="text-sm font-bold text-slate-900 mb-1">Add Quick Charge</h3>
+            <p className="text-slate-500 text-xs mb-4">Confirm or adjust the amount for <strong className="text-slate-800">"{selectedQuickCharge.name}"</strong></p>
 
             <div className="space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Charge Amount (Rs.)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold outline-none focus:border-blue-500 focus:bg-white"
-                  value={quickChargeAmount}
-                  onChange={(e) => setQuickChargeAmount(e.target.value)}
-                />
+                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Charge Amount (Rs.)</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">Rs.</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="w-full border border-slate-300 rounded pl-9 pr-3 py-1.5 text-sm font-bold outline-none focus:border-blue-600"
+                    value={quickChargeAmount}
+                    onChange={(e) => setQuickChargeAmount(e.target.value)}
+                  />
+                </div>
               </div>
 
-              <div className="flex gap-2 pt-2">
+              <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={handleConfirmQuickCharge}
                   disabled={!quickChargeAmount || parseFloat(quickChargeAmount) <= 0}
-                  className="flex-1 bg-violet-600 hover:bg-violet-700 text-white py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all disabled:opacity-40"
+                  className="flex-1 border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-40"
                 >
                   Post Charge
                 </button>
                 <button
                   type="button"
                   onClick={() => setSelectedQuickCharge(null)}
-                  className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all"
+                  className="flex-1 border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800 py-2 rounded font-bold text-xs uppercase tracking-wider transition-all"
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Payment Modal Popup */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md bg-white rounded p-6 shadow-xl border border-slate-300 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start border-b border-slate-200 pb-3 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Record Payment</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Booking #00{booking.id}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-0.5 rounded transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="bg-slate-50 border border-slate-200 rounded p-3 mb-4 text-xs flex justify-between items-center">
+              <span className="font-bold text-slate-500 uppercase tracking-wide text-[9px]">Remaining to Pay</span>
+              <span className="font-black text-slate-900 text-sm">Rs. {Math.max(0, balanceDue).toFixed(2)}</span>
+            </div>
+
+            <form onSubmit={handleAddPayment} className="space-y-4">
+              {/* Payment Type Selector */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold uppercase text-slate-500">Payment Option</label>
+                <div className="flex border border-slate-300 rounded overflow-hidden">
+                  {[
+                    { value: 'advance', label: 'Advance Payment' },
+                    { value: 'full', label: 'Full Payment' }
+                  ].map(t => (
+                    <button
+                      key={t.value}
+                      type="button"
+                      onClick={() => setPaymentType(t.value)}
+                      className={`flex-1 py-1.5 text-xs font-bold text-center transition-all ${
+                        paymentType === t.value 
+                          ? 'bg-slate-900 text-white' 
+                          : 'bg-white hover:bg-slate-50 text-slate-800'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Payment Method Selector */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold uppercase text-slate-500">Select Method</label>
+                <div className="flex gap-2">
+                  {[
+                    { value: 'cash', label: 'Cash' },
+                    { value: 'card', label: 'Card' },
+                    { value: 'bank', label: 'Bank Transfer' }
+                  ].map(m => (
+                    <button
+                      key={m.value}
+                      type="button"
+                      onClick={() => setNewPayment(prev => ({ ...prev, method: m.value }))}
+                      className={`border flex-1 py-2 text-xs font-bold rounded text-center transition-all ${
+                        newPayment.method === m.value 
+                          ? 'border-blue-600 bg-blue-50 text-blue-700' 
+                          : 'border-slate-300 bg-white hover:bg-slate-50 text-slate-800'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Amount to Pay */}
+              <div className="space-y-1.5">
+                <label className="block text-[10px] font-bold uppercase text-slate-500">Amount to Pay</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">Rs.</span>
+                  <input
+                    type="number"
+                    placeholder="0.00"
+                    min="0.01"
+                    step="0.01"
+                    className={`w-full border rounded pl-9 pr-3 py-1.5 text-sm font-bold outline-none ${
+                      paymentError ? 'border-red-300 bg-red-50 text-red-900' : 'border-slate-300 focus:border-blue-600'
+                    }`}
+                    value={newPayment.amount}
+                    onChange={e => {
+                      setPaymentError('');
+                      setNewPayment({ ...newPayment, amount: e.target.value });
+                    }}
+                  />
+                </div>
+                {paymentError && (
+                  <p className="text-xs text-red-650 font-bold mt-1 leading-tight">{paymentError}</p>
+                )}
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowPaymentModal(false)}
+                  className="flex-1 border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800 py-2 rounded font-bold text-xs uppercase tracking-wider transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={grandTotal > 0 && balanceDue <= 0}
+                  className="flex-1 border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-bold text-xs uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Post Payment
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Refund Advance Modal */}
+      {showRefundModal && (
+        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-md bg-white rounded p-6 shadow-xl border border-slate-300 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex justify-between items-start border-b border-slate-200 pb-3 mb-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">Manage Advance Refund</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Booking #00{booking.id}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRefundModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-0.5 rounded transition-all"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <p className="text-xs text-slate-500">
+                The booking has been cancelled. Below are the payments recorded. You can mark them as refunded to reduce the amount from revenue.
+              </p>
+
+              <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto">
+                {payments.map(pay => (
+                    <div key={pay.id} className="py-3 flex items-center justify-between gap-4 text-xs">
+                      <div>
+                        <p className="font-bold text-slate-800 uppercase">{pay.method} Payment</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border ${
+                            pay.note === 'Advance Payment' 
+                              ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                              : pay.note === 'Full Payment'
+                              ? 'bg-slate-50 text-slate-700 border-slate-300'
+                              : 'bg-slate-50 text-slate-400 border-slate-200 italic'
+                          }`}>
+                            {pay.note || 'General Payment'}
+                          </span>
+                          <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider border ${
+                            pay.status === 'refunded' ? 'bg-red-50 text-red-750 border-red-150' : 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                          }`}>
+                            {pay.status}
+                          </span>
+                        </div>
+                        <p className="text-[10px] text-slate-450 mt-1">{pay.date} · Rs. {pay.amount.toFixed(2)}</p>
+                      </div>
+                      
+                      <div className="flex gap-2">
+                        {pay.status === 'refunded' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdatePaymentStatus(pay.id, 'paid')}
+                            className="border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 px-3 py-1.5 rounded font-bold text-[10px] uppercase transition-all"
+                          >
+                            Mark Paid
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleUpdatePaymentStatus(pay.id, 'refunded')}
+                            className="border border-red-600 bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-bold text-[10px] uppercase transition-all shadow-sm"
+                          >
+                            Refund Payment
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                }
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setShowRefundModal(false)}
+                  className="border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-800 px-4 py-2 rounded font-bold text-xs uppercase tracking-wider transition-all"
+                >
+                  Close
                 </button>
               </div>
             </div>

@@ -148,6 +148,18 @@
     @apply h-10 rounded-lg border border-blue-100 bg-white px-3 text-sm font-medium text-slate-700 transition-all focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 focus:outline-none placeholder:text-slate-400;
   }
 
+  .admin-filter-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    padding: 2px;
+    margin-left: 8px;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .admin-filter-input::-webkit-calendar-picker-indicator:hover {
+    background-color: #f1f5f9;
+  }
+
   .admin-filter-btn-reset {
     @apply flex h-10 w-10 items-center justify-center rounded-lg border border-blue-100 bg-white text-slate-400 transition-all hover:bg-blue-50 hover:text-blue-600 active:scale-95;
   }

@@ -1,4 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../api';
 
 const statusColors = {
@@ -21,6 +22,7 @@ function calcNights(checkIn, checkOut) {
 }
 
 export default function Guests() {
+  const navigate = useNavigate();
   const [guests, setGuests] = useState([]);
   const [loading, setLoading] = useState(false);
   const [q, setQ] = useState('');
@@ -55,11 +57,55 @@ export default function Guests() {
     setEndDate('');
   };
 
+  const uniqueGuests = useMemo(() => {
+    const map = {};
+    guests.forEach((b) => {
+      const contactKey = (b.guestContact || '').trim();
+      const nameKey = (b.guestName || '').trim();
+      const key = contactKey || nameKey;
+      if (!key) return;
+
+      if (!map[key]) {
+        map[key] = {
+          key,
+          guestName: b.guestName,
+          guestContact: b.guestContact || '-',
+          guestNic: b.guestNic || '',
+          bookings: [],
+        };
+      }
+      if (b.guestNic && !map[key].guestNic) {
+        map[key].guestNic = b.guestNic;
+      }
+      if (b.guestName && b.guestName.length > map[key].guestName.length) {
+        map[key].guestName = b.guestName;
+      }
+      map[key].bookings.push(b);
+    });
+
+    return Object.values(map).map((g) => {
+      g.bookings.sort((x, y) => new Date(y.checkInDate) - new Date(x.checkInDate));
+      const latestBooking = g.bookings[0] || {};
+      return {
+        ...g,
+        bookingsCount: g.bookings.length,
+        latestBooking,
+        propertyName: latestBooking.propertyName || '-',
+        roomNumber: latestBooking.roomNumber || '-',
+        roomType: latestBooking.roomType || '-',
+        checkInDate: latestBooking.checkInDate,
+        checkOutDate: latestBooking.checkOutDate,
+        status: latestBooking.status,
+        id: latestBooking.id,
+      };
+    }).sort((x, y) => new Date(y.checkInDate) - new Date(x.checkInDate));
+  }, [guests]);
+
   const stats = {
-    total: guests.length,
-    checkedIn: guests.filter(g => g.status === 'checked-in').length,
-    upcoming: guests.filter(g => g.status === 'confirmed' || g.status === 'pending').length,
-    checkedOut: guests.filter(g => g.status === 'checked-out').length,
+    total: uniqueGuests.length,
+    checkedIn: uniqueGuests.filter(g => g.status === 'checked-in').length,
+    upcoming: uniqueGuests.filter(g => g.status === 'confirmed' || g.status === 'pending').length,
+    checkedOut: uniqueGuests.filter(g => g.status === 'checked-out').length,
   };
 
   return (
@@ -152,31 +198,30 @@ export default function Guests() {
             <tr className="bg-slate-50/60 border-b border-slate-100">
               <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Guest</th>
               <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Contact</th>
-              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Property / Room</th>
-              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Check-In</th>
-              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Check-Out</th>
-              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Nights</th>
-              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Guests</th>
-              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest text-center">Bookings</th>
+              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Latest Property / Room</th>
+              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Latest Stay Dates</th>
+              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest">Latest Status</th>
+              <th className="px-5 py-4 text-[11px] font-black text-slate-400 uppercase tracking-widest text-right">History</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
             {loading ? (
               <tr>
-                <td colSpan="8" className="py-16 text-center">
+                <td colSpan="7" className="py-16 text-center">
                   <div className="inline-block h-6 w-6 animate-spin rounded-full border-4 border-blue-600 border-t-transparent" />
                 </td>
               </tr>
-            ) : guests.length === 0 ? (
+            ) : uniqueGuests.length === 0 ? (
               <tr>
-                <td colSpan="8" className="py-20 text-center">
+                <td colSpan="7" className="py-20 text-center">
                   <p className="text-xs font-black text-slate-300 uppercase tracking-[0.2em]">No guests found</p>
                 </td>
               </tr>
             ) : (
-              guests.map((g) => (
+              uniqueGuests.map((g) => (
                 <tr
-                  key={g.id}
+                  key={g.key}
                   className="hover:bg-slate-50/50 transition-colors cursor-pointer group"
                   onClick={() => setSelected(g)}
                 >
@@ -192,23 +237,33 @@ export default function Guests() {
                     </div>
                   </td>
                   <td className="px-5 py-4 text-sm font-bold text-slate-600">{g.guestContact}</td>
+                  <td className="px-5 py-4 text-center">
+                    <span className="inline-block px-2.5 py-1 text-xs font-black text-blue-600 bg-blue-50 border border-blue-100 rounded-lg">
+                      {g.bookingsCount}
+                    </span>
+                  </td>
                   <td className="px-5 py-4">
                     <p className="text-sm font-bold text-slate-800">{g.propertyName}</p>
                     <p className="text-[11px] font-bold text-slate-400 uppercase">Room {g.roomNumber} · {g.roomType}</p>
                   </td>
-                  <td className="px-5 py-4 text-sm font-bold text-slate-700 whitespace-nowrap">{formatDate(g.checkInDate)}</td>
-                  <td className="px-5 py-4 text-sm font-bold text-slate-700 whitespace-nowrap">{formatDate(g.checkOutDate)}</td>
-                  <td className="px-5 py-4">
-                    <span className="text-sm font-black text-slate-900">{calcNights(g.checkInDate, g.checkOutDate)}</span>
-                    <span className="text-[11px] font-bold text-slate-400 ml-1">nights</span>
-                  </td>
-                  <td className="px-5 py-4 text-sm font-bold text-slate-600">
-                    {g.adults}A {g.children > 0 ? `${g.children}C` : ''}
+                  <td className="px-5 py-4 text-sm font-bold text-slate-700 whitespace-nowrap">
+                    {formatDate(g.checkInDate)} - {formatDate(g.checkOutDate)}
                   </td>
                   <td className="px-5 py-4">
                     <span className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full ${statusColors[g.status] || 'bg-slate-100 text-slate-500'}`}>
                       {g.status}
                     </span>
+                  </td>
+                  <td className="px-5 py-4 text-right">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelected(g);
+                      }}
+                      className="px-3 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-md active:scale-95"
+                    >
+                      History
+                    </button>
                   </td>
                 </tr>
               ))
@@ -221,12 +276,12 @@ export default function Guests() {
       <div className="lg:hidden space-y-3 mb-6">
         {loading ? (
           <div className="py-12 text-center text-slate-400 font-medium">Loading guests...</div>
-        ) : guests.length === 0 ? (
+        ) : uniqueGuests.length === 0 ? (
           <div className="py-12 text-center text-slate-400 font-medium">No guests found</div>
         ) : (
-          guests.map((g) => (
+          uniqueGuests.map((g) => (
             <div
-              key={g.id}
+              key={g.key}
               className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 cursor-pointer active:scale-[0.99] transition-transform"
               onClick={() => setSelected(g)}
             >
@@ -240,39 +295,51 @@ export default function Guests() {
                     <p className="text-xs font-bold text-slate-400">{g.guestContact}</p>
                   </div>
                 </div>
+                <span className="inline-block px-2 py-0.5 text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100 rounded-md">
+                  {g.bookingsCount} stay{g.bookingsCount !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-slate-50">
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase mb-0.5">Latest Visit</p>
+                  <p className="text-xs font-bold text-slate-700">{g.propertyName}</p>
+                  <p className="text-[9px] font-bold text-slate-400">Room {g.roomNumber}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-slate-400 uppercase mb-0.5">Latest Dates</p>
+                  <p className="text-xs font-bold text-slate-700">{formatDate(g.checkInDate)}</p>
+                  <p className="text-[10px] font-bold text-slate-500">{formatDate(g.checkOutDate)}</p>
+                </div>
+              </div>
+              <div className="flex justify-between items-center mt-3 pt-3 border-t border-slate-50">
                 <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${statusColors[g.status] || 'bg-slate-100 text-slate-500'}`}>
                   {g.status}
                 </span>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelected(g);
+                  }}
+                  className="text-xs text-blue-600 font-black hover:underline"
+                >
+                  View History
+                </button>
               </div>
-              <div className="grid grid-cols-3 gap-2 mt-3 pt-3 border-t border-slate-50">
-                <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase mb-0.5">Check-In</p>
-                  <p className="text-xs font-bold text-slate-700">{formatDate(g.checkInDate)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase mb-0.5">Check-Out</p>
-                  <p className="text-xs font-bold text-slate-700">{formatDate(g.checkOutDate)}</p>
-                </div>
-                <div>
-                  <p className="text-[10px] font-black text-slate-400 uppercase mb-0.5">Room</p>
-                  <p className="text-xs font-bold text-slate-700">{g.roomNumber}</p>
-                </div>
-              </div>
-              <p className="text-[11px] font-bold text-slate-400 mt-2">{g.propertyName} · {calcNights(g.checkInDate, g.checkOutDate)} nights</p>
             </div>
           ))
         )}
       </div>
 
-      {guests.length > 0 && (
-        <p className="text-center text-[11px] font-black text-slate-300 uppercase tracking-widest">{guests.length} record{guests.length !== 1 ? 's' : ''} found</p>
+      {uniqueGuests.length > 0 && (
+        <p className="text-center text-[11px] font-black text-slate-300 uppercase tracking-widest">{uniqueGuests.length} unique guest{uniqueGuests.length !== 1 ? 's' : ''} found</p>
       )}
 
-      {/* Guest Detail Modal */}
+      {/* Guest Booking History Modal */}
       {selected && (
         <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-sm flex items-end md:items-center justify-center p-4">
-          <div className="w-full max-w-md bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300 max-h-[90vh] flex flex-col">
-            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 pt-8 pb-10 relative flex-shrink-0">
+          <div className="w-full max-w-2xl bg-white rounded-[2rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300 max-h-[90vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-600 to-blue-700 px-6 pt-8 pb-8 relative flex-shrink-0">
               <button onClick={() => setSelected(null)} className="absolute top-4 right-4 h-8 w-8 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-all">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -282,49 +349,74 @@ export default function Guests() {
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-white">{selected.guestName}</h3>
-                  <p className="text-blue-200 text-sm font-bold">{selected.guestContact}</p>
-                </div>
-              </div>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto">
-              <div className="-mt-6 mx-4 bg-white rounded-2xl shadow-sm border border-slate-100 p-4 grid grid-cols-3 gap-3 relative z-10">
-                <div className="text-center">
-                  <p className="text-[10px] font-black text-slate-400 uppercase">Check-In</p>
-                  <p className="text-xs font-black text-slate-900 mt-0.5">{formatDate(selected.checkInDate)}</p>
-                </div>
-                <div className="text-center border-x border-slate-100">
-                  <p className="text-[10px] font-black text-slate-400 uppercase">Nights</p>
-                  <p className="text-lg font-black text-blue-600 mt-0.5">{calcNights(selected.checkInDate, selected.checkOutDate)}</p>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] font-black text-slate-400 uppercase">Check-Out</p>
-                  <p className="text-xs font-black text-slate-900 mt-0.5">{formatDate(selected.checkOutDate)}</p>
-                </div>
-              </div>
-              <div className="p-6 pt-4 space-y-3">
-                {[
-                  { label: 'Property', value: selected.propertyName },
-                  { label: 'Room', value: `${selected.roomNumber} — ${selected.roomType}${selected.floor ? ` (Floor ${selected.floor})` : ''}` },
-                  { label: 'Guests', value: `${selected.adults} Adult${selected.adults !== 1 ? 's' : ''}${selected.children > 0 ? `, ${selected.children} Child${selected.children !== 1 ? 'ren' : ''}` : ''}` },
-                  selected.guestNic ? { label: 'NIC', value: selected.guestNic } : null,
-                  { label: 'Status', value: selected.status, isStatus: true },
-                  selected.notes ? { label: 'Notes', value: selected.notes } : null,
-                ].filter(Boolean).map(({ label, value, isStatus }) => (
-                  <div key={label} className="flex items-start justify-between gap-3">
-                    <span className="text-[11px] font-black text-slate-400 uppercase tracking-wider flex-shrink-0 w-20">{label}</span>
-                    {isStatus ? (
-                      <span className={`text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${statusColors[value] || 'bg-slate-100 text-slate-500'}`}>{value}</span>
-                    ) : (
-                      <span className="text-sm font-bold text-slate-800 text-right">{value}</span>
-                    )}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1 text-blue-100 text-xs font-bold">
+                    <span>Contact: {selected.guestContact}</span>
+                    {selected.guestNic && <span>NIC: {selected.guestNic}</span>}
                   </div>
-                ))}
+                </div>
               </div>
             </div>
             
-            <div className="px-6 pb-6 pt-2 flex-shrink-0 bg-white border-t border-slate-50">
-              <button onClick={() => setSelected(null)} className="w-full py-3 rounded-2xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-all">
+            {/* Modal Content - Scrollable list of bookings */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div>
+                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Stay & Booking History ({selected.bookingsCount} booking{selected.bookingsCount !== 1 ? 's' : ''})</h4>
+                <div className="overflow-x-auto border border-slate-100 rounded-2xl shadow-sm">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-100">
+                        <th className="p-3.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Property / Room</th>
+                        <th className="p-3.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Dates</th>
+                        <th className="p-3.5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Nights</th>
+                        <th className="p-3.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">Status</th>
+                        <th className="p-3.5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                      {selected.bookings.map((b) => (
+                        <tr 
+                          key={b.id} 
+                          className="hover:bg-blue-50/30 transition-colors cursor-pointer group"
+                          onClick={() => {
+                            setSelected(null);
+                            navigate(`/hotel/bookings/${b.id}`);
+                          }}
+                        >
+                          <td className="p-3.5">
+                            <p className="text-xs font-bold text-slate-800">{b.propertyName}</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">Room {b.roomNumber} · {b.roomType}</p>
+                          </td>
+                          <td className="p-3.5 text-xs font-semibold text-slate-600 whitespace-nowrap">
+                            {formatDate(b.checkInDate)} - {formatDate(b.checkOutDate)}
+                          </td>
+                          <td className="p-3.5 text-xs font-black text-slate-700 text-center">
+                            {calcNights(b.checkInDate, b.checkOutDate)}
+                          </td>
+                          <td className="p-3.5">
+                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${statusColors[b.status] || 'bg-slate-100 text-slate-500'}`}>
+                              {b.status}
+                            </span>
+                          </td>
+                          <td className="p-3.5 text-right">
+                            <span className="text-[10px] font-bold text-blue-600 group-hover:underline">
+                              View details
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            
+            {/* Modal Footer */}
+            <div className="px-6 pb-6 pt-4 flex-shrink-0 bg-white border-t border-slate-50 flex items-center justify-between">
+              <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Click on any row to open booking details</p>
+              <button 
+                onClick={() => setSelected(null)} 
+                className="px-6 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs transition-all shadow-sm"
+              >
                 Close
               </button>
             </div>

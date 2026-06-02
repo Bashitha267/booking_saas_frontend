@@ -17,6 +17,7 @@ export default function PropertyManagement() {
     maxAdults: 2,
     maxChildren: 0,
     basePrice: '',
+    hasAc: false,
   });
   const [propertyForm, setPropertyForm] = useState({
     name: '',
@@ -38,6 +39,7 @@ export default function PropertyManagement() {
     capacityChildren: 0,
     price: '',
     status: 'available',
+    hasAc: false,
   });
   const [assignStatus, setAssignStatus] = useState({ type: '', message: '' });
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -49,6 +51,7 @@ export default function PropertyManagement() {
     price: '',
     status: '',
     propertyId: '',
+    hasAc: false,
   });
   const [editStatus, setEditStatus] = useState({ type: '', message: '' });
 
@@ -217,6 +220,7 @@ export default function PropertyManagement() {
         capacityChildren: Number(roomForm.maxChildren) || 0,
         price: Number(roomForm.basePrice) || 0,
         status: 'available',
+        hasAc: roomForm.hasAc ? 1 : 0,
       }));
 
       for (const payload of payloads) {
@@ -234,6 +238,7 @@ export default function PropertyManagement() {
         maxAdults: 2,
         maxChildren: 0,
         basePrice: '',
+        hasAc: false,
       });
       setRoomNumbers(['']);
     } catch (error) {
@@ -259,6 +264,7 @@ export default function PropertyManagement() {
       capacityChildren: type.maxChildren || 0,
       price: type.basePrice || '',
       status: 'available',
+      hasAc: firstRoom?.hasAc === 1,
     });
     setAssignStatus({ type: '', message: '' });
     setIsAssignModalOpen(true);
@@ -273,6 +279,7 @@ export default function PropertyManagement() {
       price: type.basePrice || '',
       status: '',
       propertyId: '',
+      hasAc: type.rooms.some((r) => r.hasAc === 1),
     });
     setEditStatus({ type: '', message: '' });
     setIsEditModalOpen(true);
@@ -306,6 +313,7 @@ export default function PropertyManagement() {
         capacityChildren: Number(assignRoomForm.capacityChildren) || 0,
         price: Number(assignRoomForm.price) || 0,
         status: assignRoomForm.status || 'available',
+        hasAc: assignRoomForm.hasAc ? 1 : 0,
       };
 
       await api.post('/rooms', payload);
@@ -343,6 +351,7 @@ export default function PropertyManagement() {
         capacityAdults: Number(editTypeForm.capacityAdults) || 1,
         capacityChildren: Number(editTypeForm.capacityChildren) || 0,
         price: Number(editTypeForm.price) || 0,
+        hasAc: editTypeForm.hasAc ? 1 : 0,
       };
       if (editTypeForm.status) {
         payload.status = editTypeForm.status;
@@ -358,6 +367,18 @@ export default function PropertyManagement() {
       setEditTarget(null);
     } catch (error) {
       setEditStatus({ type: 'error', message: 'Failed to update room settings.' });
+    }
+  };
+
+  const handleDeleteRoom = async (roomId) => {
+    if (!window.confirm('Are you sure you want to delete this room?')) {
+      return;
+    }
+    try {
+      await api.delete(`/rooms/${roomId}`);
+      await refreshRooms();
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to delete room.');
     }
   };
 
@@ -470,17 +491,33 @@ export default function PropertyManagement() {
                           {room.roomNumber}
                         </div>
                         <div>
-                          <p className="text-[11px] font-black text-slate-700">Room Unit</p>
-                          <p className="text-[9px] font-bold uppercase tracking-wider text-slate-400">
-                            {room.status || 'available'}
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-[11px] font-black text-slate-800">Unit {room.roomNumber}</span>
+                            {room.hasAc === 1 ? (
+                              <span className="bg-violet-50 text-violet-700 px-1.5 py-0.2 rounded text-[7px] font-black uppercase tracking-wider border border-violet-100">AC</span>
+                            ) : (
+                              <span className="bg-slate-50 text-slate-400 px-1.5 py-0.2 rounded text-[7px] font-bold uppercase tracking-wider border border-slate-100">Non-AC</span>
+                            )}
+                          </div>
+                          <p className="text-[9px] font-semibold text-slate-400">
+                            Property: <span className="text-slate-600 font-extrabold">{room.propertyName || 'Unassigned'}</span>
                           </p>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 md:gap-3.5">
                         <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-1 rounded-md ${room.status === 'maintenance' ? 'bg-amber-50 text-amber-600' : room.status === 'blocked' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
                           {room.status || 'available'}
                         </span>
+                        <button
+                          onClick={() => handleDeleteRoom(room.id)}
+                          className="p-1.5 text-slate-350 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-all"
+                          title="Delete Room"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
                       </div>
                     </div>
                   ))}
@@ -621,6 +658,18 @@ export default function PropertyManagement() {
                   onChange={handleRoomFormChange('basePrice')}
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 />
+              </div>
+              <div className="flex items-center gap-2.5 py-1">
+                <input
+                  type="checkbox"
+                  id="hasAc"
+                  checked={roomForm.hasAc || false}
+                  onChange={(e) => setRoomForm(prev => ({ ...prev, hasAc: e.target.checked }))}
+                  className="w-4 h-4 text-blue-650 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                />
+                <label htmlFor="hasAc" className="text-[10px] font-extrabold text-slate-700 uppercase tracking-widest cursor-pointer select-none">
+                  Air Conditioned (AC) Room
+                </label>
               </div>
               <button
                 onClick={handleCreateRooms}
@@ -831,6 +880,18 @@ export default function PropertyManagement() {
                   </select>
                 </div>
               </div>
+              <div className="flex items-center gap-2.5 py-1">
+                <input
+                  type="checkbox"
+                  id="assignHasAc"
+                  checked={assignRoomForm.hasAc || false}
+                  onChange={(e) => setAssignRoomForm(prev => ({ ...prev, hasAc: e.target.checked }))}
+                  className="w-4 h-4 text-blue-655 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                />
+                <label htmlFor="assignHasAc" className="text-[10px] font-extrabold text-slate-700 uppercase tracking-widest cursor-pointer select-none">
+                  Air Conditioned (AC)
+                </label>
+              </div>
               <button
                 onClick={handleAssignRoom}
                 className="w-full bg-slate-900 text-white py-4 rounded-[1.5rem] font-black tracking-tight text-sm shadow-xl shadow-slate-200 mt-2 hover:bg-blue-600 transition-all active:scale-95"
@@ -928,6 +989,18 @@ export default function PropertyManagement() {
                     <option value="blocked">Blocked</option>
                   </select>
                 </div>
+              </div>
+              <div className="flex items-center gap-2.5 py-1">
+                <input
+                  type="checkbox"
+                  id="editHasAc"
+                  checked={editTypeForm.hasAc || false}
+                  onChange={(e) => setEditTypeForm(prev => ({ ...prev, hasAc: e.target.checked }))}
+                  className="w-4 h-4 text-blue-655 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                />
+                <label htmlFor="editHasAc" className="text-[10px] font-extrabold text-slate-700 uppercase tracking-widest cursor-pointer select-none">
+                  Air Conditioned (AC)
+                </label>
               </div>
               <button
                 onClick={handleUpdateRoomType}

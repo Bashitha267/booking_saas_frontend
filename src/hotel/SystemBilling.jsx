@@ -48,7 +48,8 @@ export default function SystemBilling() {
     amount: '',
     method: 'bank',
     note: '',
-    proofUrl: ''
+    proofUrl: '',
+    proofFileName: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -81,6 +82,10 @@ export default function SystemBilling() {
   const regularBills = billing.filter(b => b.isPromotion !== 1);
 
   const monthlyPrice = Number(systemStatus.ownerPackagePrice != null ? systemStatus.ownerPackagePrice : systemStatus.globalFee);
+  const targetDue = systemStatus.remaining > 0 ? systemStatus.remaining : monthlyPrice;
+  const isFullPaymentSubmitted = systemStatus.pendingPaid >= targetDue;
+  const hasPendingPayment = systemStatus.pendingPaid > 0;
+
   const baseYearlyPrice = Number(systemStatus.yearlyPrice != null ? systemStatus.yearlyPrice : monthlyPrice * 12);
   const yearlyDiscount = Number(systemStatus.yearlyDiscount || 0);
   const yearlyPrice = Math.max(0, baseYearlyPrice - yearlyDiscount);
@@ -149,7 +154,8 @@ export default function SystemBilling() {
         amount: '',
         method: 'bank',
         note: '',
-        proofUrl: ''
+        proofUrl: '',
+        proofFileName: ''
       });
       fetchData();
     } catch (error) {
@@ -231,11 +237,21 @@ export default function SystemBilling() {
         </div>
       )}
 
-      <div className="mb-8">
-        <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">System Settlement History</h1>
-        <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">
-          View all platform fee invoices and your payment history
-        </p>
+      <div className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl md:text-3xl font-black text-slate-800 tracking-tight">System Settlement History</h1>
+          <p className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">
+            View all platform fee invoices and your payment history
+          </p>
+        </div>
+        {!isPromoMonth && systemStatus.status !== 'paid' && (
+          <button 
+            onClick={handleOpenPayModal}
+            className="flex-shrink-0 bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-6 rounded-xl transition-all shadow-md shadow-slate-100 uppercase tracking-widest text-[10px] active:scale-95"
+          >
+            Pay to System
+          </button>
+        )}
       </div>
 
       <div className="grid gap-8">
@@ -249,9 +265,9 @@ export default function SystemBilling() {
               <div className="bg-white p-6 md:p-8 rounded-[1.5rem] border border-slate-100 shadow-sm relative overflow-hidden">
                 <div className="md:absolute md:top-0 md:right-0 p-4 md:p-8">
                   <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
-                    isPromoMonth ? 'bg-violet-50 text-violet-600' :
-                    systemStatus.status === 'paid' ? 'bg-emerald-50 text-emerald-600' :
-                    systemStatus.status === 'partial' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
+                    isPromoMonth ? 'bg-violet-50 text-violet-700 border border-violet-100' :
+                    systemStatus.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                    systemStatus.status === 'partial' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
                   }`}>
                     {isPromoMonth ? 'Promotion Active' :
                      systemStatus.status === 'paid' ? 'Paid & Up-to-date' :
@@ -268,12 +284,12 @@ export default function SystemBilling() {
                       <div className="space-y-3 max-w-sm">
                         <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
                           <span className="text-slate-400">Total Submitted</span>
-                          <span className="text-blue-600">{formatMoney((systemStatus.approvedPaid || 0) + (systemStatus.pendingPaid || 0))}</span>
+                          <span className="text-slate-800 font-bold">{formatMoney((systemStatus.approvedPaid || 0) + (systemStatus.pendingPaid || 0))}</span>
                         </div>
-                        <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
+                        <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                           <div className={`h-full transition-all duration-1000 ${
-                            systemStatus.status === 'paid' ? 'bg-emerald-500' :
-                            systemStatus.status === 'partial' ? 'bg-amber-500' : 'bg-rose-500'
+                            systemStatus.status === 'paid' ? 'bg-slate-800' :
+                            systemStatus.status === 'partial' ? 'bg-slate-500' : 'bg-slate-300'
                           }`} style={{ width: `${Math.min((((systemStatus.approvedPaid || 0) + (systemStatus.pendingPaid || 0)) / (monthlyPrice || 1)) * 100, 100)}%` }} />
                         </div>
                         <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
@@ -282,9 +298,15 @@ export default function SystemBilling() {
                         </div>
                       </div>
                       <div className="mt-6 pt-6 border-t border-slate-100 flex gap-3">
-                        <button onClick={handleOpenPayModal} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all shadow-sm shadow-emerald-200 uppercase tracking-widest text-xs">
-                          Make Payment
-                        </button>
+                        {systemStatus.status === 'paid' ? (
+                          <div className="flex-1 bg-emerald-55 text-emerald-700 font-bold py-3 px-4 rounded-xl border border-emerald-100 text-center uppercase tracking-widest text-xs">
+                            ✓ Billing Settled
+                          </div>
+                        ) : (
+                          <button onClick={handleOpenPayModal} className="flex-1 bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl transition-all shadow-sm shadow-slate-200 uppercase tracking-widest text-xs">
+                            Make Payment
+                          </button>
+                        )}
                       </div>
                     </>
                   )}
@@ -300,14 +322,14 @@ export default function SystemBilling() {
                 <div key={bill.id} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm relative overflow-hidden group">
                   <div className="absolute top-0 right-0 p-6 flex flex-col items-end gap-2">
                     <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full ${
-                      isPromo ? 'bg-violet-50 text-violet-600' :
-                      bill.status === 'paid' ? 'bg-emerald-50 text-emerald-600' :
-                      bill.status === 'partial' ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'
+                      isPromo ? 'bg-violet-50 text-violet-700 border border-violet-100' :
+                      bill.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                      bill.status === 'partial' ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-rose-50 text-rose-700 border border-rose-100'
                     }`}>
                       {isPromo ? 'Promotion' : bill.status}
                     </span>
                     {bill.billingCycle === 'yearly' && (
-                      <span className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-blue-50 text-blue-600">Yearly</span>
+                      <span className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">Yearly</span>
                     )}
                   </div>
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">
@@ -319,7 +341,7 @@ export default function SystemBilling() {
                   <h3 className="text-2xl font-black text-slate-900 mb-6">{formatMoney(bill.amountDue)}</h3>
 
                   {Number(bill.discount) > 0 && (
-                    <p className="text-xs font-bold text-emerald-600 mb-4">
+                    <p className="text-xs font-bold text-slate-800 mb-4">
                       ✓ Discount applied: {formatMoney(bill.discount)}
                     </p>
                   )}
@@ -327,17 +349,17 @@ export default function SystemBilling() {
                   <div className="space-y-3 max-w-md">
                     <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
                       <span className="text-slate-400">Paid</span>
-                      <span className="text-emerald-600">{formatMoney(bill.amountPaid)}</span>
+                      <span className="text-slate-800 font-bold">{formatMoney(bill.amountPaid)}</span>
                     </div>
-                    <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
+                    <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
                       <div
-                        className={`h-full transition-all duration-1000 ${bill.status === 'paid' ? 'bg-emerald-500' : 'bg-amber-400'}`}
+                        className={`h-full transition-all duration-1000 ${bill.status === 'paid' ? 'bg-slate-800' : 'bg-slate-500'}`}
                         style={{ width: `${Math.min(bill.amountDue > 0 ? (bill.amountPaid / bill.amountDue) * 100 : 0, 100)}%` }}
                       />
                     </div>
                     <div className="flex justify-between items-center text-xs font-bold uppercase tracking-widest">
                       <span className="text-slate-400">Remaining</span>
-                      <span className="text-rose-600">{formatMoney(bill.amountDue - bill.amountPaid)}</span>
+                      <span className="text-rose-600 font-black">{formatMoney(bill.amountDue - bill.amountPaid)}</span>
                     </div>
                   </div>
 
@@ -346,7 +368,7 @@ export default function SystemBilling() {
                     <div className="mt-6 pt-6 border-t border-slate-100">
                       <button
                         onClick={handleOpenPayModal}
-                        className="w-full max-w-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded-xl transition-all shadow-sm shadow-emerald-200 uppercase tracking-widest text-xs"
+                        className="w-full max-w-xs bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl transition-all shadow-sm shadow-slate-200 uppercase tracking-widest text-xs"
                       >
                         Pay {formatMoney(remaining)} Remaining
                       </button>
@@ -361,33 +383,32 @@ export default function SystemBilling() {
         {/* Promotions Section */}
         {promotionBills.length > 0 && (
           <section className="space-y-4">
-            <h2 className="text-xs font-bold text-violet-600 uppercase tracking-widest ml-1">Promotions &amp; Free Trials</h2>
+            <h2 className="text-xs font-bold text-violet-700 uppercase tracking-widest ml-1">Promotions &amp; Free Trials</h2>
             <div className="grid gap-4">
               {promotionBills.map(bill => (
                 <div
                   key={bill.id}
-                  className="p-6 rounded-[2rem] border shadow-sm relative overflow-hidden"
-                  style={{
-                    background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)',
-                    borderColor: '#d8b4fe',
-                  }}
+                  className="p-6 rounded-[1.5rem] border border-violet-200/70 bg-gradient-to-br from-violet-50/80 to-purple-50/30 shadow-sm relative overflow-hidden"
                 >
                   <div className="absolute top-0 right-0 p-6">
                     <span
-                      className="text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-full"
-                      style={{ background: '#7c3aed', color: '#fff' }}
+                      className="text-[9px] font-black uppercase tracking-[0.2em] px-3 py-1.5 rounded-full bg-violet-950 text-violet-200 border border-violet-800/30 shadow-sm shadow-violet-100"
                     >
                       Free Promotion
                     </span>
                   </div>
-                  <p className="text-xs font-bold text-violet-400 uppercase tracking-widest mb-1">
+                  <p className="text-[10px] font-black text-violet-600 uppercase tracking-widest mb-1.5 block">
                     Complimentary Period
                   </p>
-                  <p className="text-sm font-bold text-slate-700 mb-1">{formatDate(bill.periodStart)} → {formatDate(bill.periodEnd)}</p>
-                  <h3 className="text-xl font-black mb-1" style={{ color: '#7c3aed' }}>
-                    {formatMoney(bill.amountDue)} <span className="text-sm font-bold text-violet-400">waived</span>
+                  <p className="text-sm font-extrabold text-violet-950 mb-1.5">{formatDate(bill.periodStart)} → {formatDate(bill.periodEnd)}</p>
+                  <h3 className="text-xl md:text-2xl font-black mb-1 text-violet-900 tracking-tight">
+                    {formatMoney(bill.amountDue)} <span className="text-xs font-bold text-violet-500/80 lowercase">waived</span>
                   </h3>
-                  {bill.note && <p className="text-xs font-medium text-violet-400 mt-2">Note: {bill.note}</p>}
+                  {bill.note && (
+                    <p className="text-xs font-semibold text-violet-600/90 bg-violet-100/30 px-3 py-1.5 rounded-xl border border-violet-100/50 mt-3 inline-block">
+                      Note: {bill.note}
+                    </p>
+                  )}
                 </div>
               ))}
             </div>
@@ -457,57 +478,71 @@ export default function SystemBilling() {
               </button>
             </div>
 
-            <form onSubmit={handlePaySubmit} className="p-6 space-y-5">
+            <form onSubmit={handlePaySubmit} className="p-5 space-y-4">
+              {hasPendingPayment && (
+                <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-[11px] font-bold text-amber-800 flex items-center gap-2 mb-2 leading-normal">
+                  <span className="animate-pulse h-2 w-2 rounded-full bg-amber-500 flex-shrink-0" />
+                  <span>
+                    Verification Pending: {formatMoney(systemStatus.pendingPaid)} is currently being reviewed.
+                    {isFullPaymentSubmitted && " All dues have been submitted."}
+                  </span>
+                </div>
+              )}
+
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Billing Cycle</label>
+                <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1 mb-1.5 block">Billing Cycle</label>
                 <div className="grid grid-cols-2 gap-3">
-                  <label className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center gap-1 transition-all ${
-                    payForm.billingCycle === 'monthly' ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-100 text-slate-500 hover:border-slate-200'
+                  <label className={`cursor-pointer border-2 rounded-lg p-2.5 flex flex-col items-center gap-1 transition-all ${
+                    isFullPaymentSubmitted ? 'opacity-55 cursor-not-allowed border-slate-200 text-slate-400 bg-slate-50' :
+                    payForm.billingCycle === 'monthly' ? 'border-slate-900 bg-slate-50 text-slate-900 font-bold' : 'border-slate-200 text-slate-400 hover:border-slate-350 bg-white'
                   }`}>
-                    <input type="radio" name="cycle" value="monthly" checked={payForm.billingCycle === 'monthly'} onChange={handleBillingCycleChange} className="hidden" />
-                    <span className="text-sm font-black uppercase tracking-wider">Monthly</span>
-                    <span className="text-xs font-bold opacity-70">{formatMoney(monthlyPrice)}</span>
+                    <input type="radio" name="cycle" value="monthly" checked={payForm.billingCycle === 'monthly'} onChange={handleBillingCycleChange} className="hidden" disabled={isFullPaymentSubmitted} />
+                    <span className="text-xs font-black uppercase tracking-wider">Monthly</span>
+                    <span className="text-[10px] font-bold opacity-70">{formatMoney(monthlyPrice)}</span>
                   </label>
-                  <label className={`cursor-pointer border-2 rounded-xl p-3 flex flex-col items-center gap-1 transition-all ${
-                    payForm.billingCycle === 'yearly' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-100 text-slate-500 hover:border-slate-200'
+                  <label className={`cursor-pointer border-2 rounded-lg p-2.5 flex flex-col items-center gap-1 transition-all ${
+                    isFullPaymentSubmitted ? 'opacity-55 cursor-not-allowed border-slate-200 text-slate-400 bg-slate-50' :
+                    payForm.billingCycle === 'yearly' ? 'border-slate-900 bg-slate-50 text-slate-900 font-bold' : 'border-slate-200 text-slate-400 hover:border-slate-350 bg-white'
                   }`}>
-                    <input type="radio" name="cycle" value="yearly" checked={payForm.billingCycle === 'yearly'} onChange={handleBillingCycleChange} className="hidden" />
+                    <input type="radio" name="cycle" value="yearly" checked={payForm.billingCycle === 'yearly'} onChange={handleBillingCycleChange} className="hidden" disabled={isFullPaymentSubmitted} />
                     <div className="flex items-center gap-1">
-                      <span className="text-sm font-black uppercase tracking-wider">Yearly</span>
-                      {yearlyDiscount > 0 && <span className="bg-emerald-100 text-emerald-700 text-[9px] px-1.5 py-0.5 rounded font-black">SAVE {formatMoney(yearlyDiscount)}</span>}
+                      <span className="text-xs font-black uppercase tracking-wider">Yearly</span>
+                      {yearlyDiscount > 0 && <span className="bg-slate-900 text-white text-[8px] px-1 py-0.2 rounded font-black">SAVE {formatMoney(yearlyDiscount)}</span>}
                     </div>
-                    <span className="text-xs font-bold opacity-70">{formatMoney(yearlyPrice)}</span>
+                    <span className="text-[10px] font-bold opacity-70">{formatMoney(yearlyPrice)}</span>
                   </label>
                 </div>
               </div>
 
               {/* Start Month + End Month */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">Start Month</label>
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1 block">Start Month</label>
                   <input
                     type="month"
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-emerald-500 transition-colors"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:bg-white focus:border-slate-900 transition-colors"
                     value={payForm.periodStart || ''}
                     onChange={(e) => handleDateChange('periodStart', e.target.value)}
                     required
+                    disabled={isFullPaymentSubmitted}
                   />
                 </div>
                 {payForm.billingCycle === 'monthly' && (
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 block">End Month (Optional)</label>
+                  <div className="space-y-1.5">
+                    <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1 block">End Month (Optional)</label>
                     <input
                       type="month"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-emerald-500 transition-colors"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:bg-white focus:border-slate-900 transition-colors"
                       value={payForm.periodEnd || ''}
                       onChange={(e) => handleDateChange('periodEnd', e.target.value)}
                       min={payForm.periodStart}
+                      disabled={isFullPaymentSubmitted}
                     />
                   </div>
                 )}
                 {payForm.billingCycle === 'yearly' && (
-                  <div className="space-y-2 flex items-end">
-                    <div className="w-full h-11 flex items-center justify-center bg-blue-50 border border-blue-200 text-blue-600 rounded-xl font-bold text-[10px] uppercase tracking-widest">
+                  <div className="space-y-1.5 flex items-end">
+                    <div className="w-full h-10 flex items-center justify-center bg-slate-100 border border-slate-200 text-slate-700 rounded-xl font-bold text-[9px] uppercase tracking-widest">
                       12 Months
                     </div>
                   </div>
@@ -515,21 +550,23 @@ export default function SystemBilling() {
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Amount to Pay</label>
+                <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1 mb-1.5 block">Amount to Pay</label>
                 <input
                   type="number" step="0.01" required
                   value={payForm.amount}
                   onChange={(e) => setPayForm(prev => ({ ...prev, amount: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-emerald-500 transition-colors"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:bg-white focus:border-slate-900 transition-colors"
+                  disabled={isFullPaymentSubmitted}
                 />
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Payment Method</label>
+                <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1 mb-1.5 block">Payment Method</label>
                 <select
                   value={payForm.method}
                   onChange={(e) => setPayForm(prev => ({ ...prev, method: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-emerald-500 transition-colors uppercase tracking-wider"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:bg-white focus:border-slate-900 transition-colors uppercase tracking-wider"
+                  disabled={isFullPaymentSubmitted}
                 >
                   <option value="bank">Bank Transfer</option>
                   <option value="online">Online Payment</option>
@@ -538,46 +575,89 @@ export default function SystemBilling() {
               </div>
 
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2 block">Payment Note / Reference</label>
+                <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1 mb-1.5 block">Payment Note / Reference</label>
                 <input
                   type="text"
                   value={payForm.note}
                   onChange={(e) => setPayForm(prev => ({ ...prev, note: e.target.value }))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold outline-none focus:bg-white focus:border-emerald-500 transition-colors"
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-xs font-bold outline-none focus:bg-white focus:border-slate-900 transition-colors"
                   placeholder="Txn ID, Ref #, etc."
+                  disabled={isFullPaymentSubmitted}
                 />
+              </div>
+
+              <div>
+                <label className="text-[9px] font-bold text-slate-455 uppercase tracking-widest ml-1 mb-1.5 block">Payment Proof (Image or PDF)</label>
+                <div className="flex items-center gap-2">
+                  <label className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-300 rounded-xl py-2 px-4 bg-white cursor-pointer hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-2 text-slate-500">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+                      <span className="text-xs font-bold truncate max-w-[200px]">
+                        {payForm.proofFileName || 'Select file (Image or PDF)'}
+                      </span>
+                    </div>
+                    <input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setPayForm(prev => ({
+                              ...prev,
+                              proofUrl: reader.result,
+                              proofFileName: file.name
+                            }));
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                  {payForm.proofUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPayForm(prev => ({ ...prev, proofUrl: '', proofFileName: '' }))}
+                      className="p-3 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="pt-4 border-t border-slate-100 space-y-4">
                 {/* Payment Breakdown Preview */}
-                <div className="rounded-2xl p-4 bg-blue-50 border border-blue-200">
-                  <p className="text-[11px] font-black uppercase tracking-widest mb-3 text-blue-500">
+                <div className="rounded-xl p-3 bg-white border border-slate-200">
+                  <p className="text-[9px] font-black uppercase tracking-widest mb-2 text-slate-500">
                     Payment Breakdown
                   </p>
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs">
                       <span className="text-slate-500">Base ({paymentBreakdown.months} × {formatMoney(paymentBreakdown.basePrice / (payForm.billingCycle === 'yearly' ? 12 : 1))})</span>
                       <span className="font-bold text-slate-700">{formatMoney(paymentBreakdown.basePrice)}</span>
                     </div>
                     {paymentBreakdown.discount > 0 && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-emerald-600">Discount</span>
-                        <span className="font-bold text-emerald-600">- {formatMoney(paymentBreakdown.discount)}</span>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-slate-500 font-bold">Discount</span>
+                        <span className="font-bold text-slate-750">- {formatMoney(paymentBreakdown.discount)}</span>
                       </div>
                     )}
-                    <div className="flex justify-between text-base font-black border-t border-blue-200 pt-2 mt-2">
+                    <div className="flex justify-between text-sm font-black border-t border-slate-200 pt-1.5 mt-1.5">
                       <span className="text-slate-800">Total</span>
-                      <span className="text-blue-600">{formatMoney(paymentBreakdown.total)}</span>
+                      <span className="text-slate-900">{formatMoney(paymentBreakdown.total)}</span>
                     </div>
                   </div>
                 </div>
 
                 <button
                   type="submit"
-                  disabled={isSubmitting || !payForm.amount}
-                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-4 rounded-xl transition-all disabled:opacity-50 uppercase tracking-widest text-xs"
+                  disabled={isSubmitting || !payForm.amount || isFullPaymentSubmitted}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white font-black py-3 rounded-xl transition-all disabled:opacity-50 uppercase tracking-widest text-[10px]"
                 >
-                  {isSubmitting ? 'Submitting...' : 'Submit Payment Proof'}
+                  {isSubmitting ? 'Submitting...' : isFullPaymentSubmitted ? 'Verification Pending' : 'Submit Payment Proof'}
                 </button>
               </div>
             </form>

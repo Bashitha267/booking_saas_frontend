@@ -124,6 +124,12 @@ export default function FinanceReport() {
       .reduce((acc, pay) => acc + Number(pay.amount || 0), 0)
   ), [filteredPayments]);
 
+  const totalRefunded = useMemo(() => (
+    filteredPayments
+      .filter((pay) => pay.status === 'refunded')
+      .reduce((acc, pay) => acc + Number(pay.amount || 0), 0)
+  ), [filteredPayments]);
+
   const pendingPayments = useMemo(() => (
     filteredPayments
       .filter((pay) => pay.status === 'pending')
@@ -174,10 +180,12 @@ export default function FinanceReport() {
 
   const methodBreakdown = useMemo(() => {
     const totals = new Map();
-    filteredPayments.forEach((payment) => {
-      const method = (payment.method || 'cash').toLowerCase();
-      totals.set(method, (totals.get(method) || 0) + Number(payment.amount || 0));
-    });
+    filteredPayments
+      .filter((payment) => payment.status !== 'refunded')
+      .forEach((payment) => {
+        const method = (payment.method || 'cash').toLowerCase();
+        totals.set(method, (totals.get(method) || 0) + Number(payment.amount || 0));
+      });
     const total = Array.from(totals.values()).reduce((acc, value) => acc + value, 0) || 1;
     return Array.from(totals.entries())
       .sort((a, b) => b[1] - a[1])
@@ -203,13 +211,15 @@ export default function FinanceReport() {
   const monthlyPerformance = useMemo(() => {
     const revenueByMonth = new Map();
     const bookingsByMonth = new Map();
-    filteredPayments.forEach((payment) => {
-      const refDate = payment.paidAt || payment.createdAt;
-      if (!refDate) return;
-      const date = new Date(refDate);
-      const key = `${date.getFullYear()}-${date.getMonth()}`;
-      revenueByMonth.set(key, (revenueByMonth.get(key) || 0) + Number(payment.amount || 0));
-    });
+    filteredPayments
+      .filter((payment) => payment.status !== 'refunded')
+      .forEach((payment) => {
+        const refDate = payment.paidAt || payment.createdAt;
+        if (!refDate) return;
+        const date = new Date(refDate);
+        const key = `${date.getFullYear()}-${date.getMonth()}`;
+        revenueByMonth.set(key, (revenueByMonth.get(key) || 0) + Number(payment.amount || 0));
+      });
     filteredBookings.forEach((booking) => {
       if (!booking.checkInDate) return;
       const date = new Date(booking.checkInDate);
@@ -337,10 +347,11 @@ export default function FinanceReport() {
       )}
 
       {/* Main Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
         {[
           { label: 'Gross Revenue', value: totalRevenue, trend: '--', color: 'text-blue-600' },
           { label: 'Pending Payments', value: pendingPayments, trend: '--', color: 'text-amber-600' },
+          { label: 'Refunded Payments', value: totalRefunded, trend: '--', color: 'text-red-600' },
           { label: 'Current Occupancy', value: `${occupancyRate}%`, trend: '--', color: 'text-emerald-600' },
           { label: 'Net Profit', value: netProfit, trend: '--', color: 'text-indigo-600' }
         ].map((stat, i) => (
@@ -350,12 +361,12 @@ export default function FinanceReport() {
               <h3 className={`text-2xl font-black tracking-tighter ${stat.color}`}>
                 {typeof stat.value === 'number' ? `Rs. ${stat.value.toLocaleString()}` : stat.value}
               </h3>
-              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${stat.trend === '--' ? 'bg-slate-100 text-slate-500' : stat.trend.startsWith('+') && stat.label !== 'Total Expenses' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+              <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md ${stat.trend === '--' ? 'bg-slate-100 text-slate-500' : stat.trend.startsWith('+') && stat.label !== 'Total Expenses' && stat.label !== 'Refunded Payments' ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
                 {stat.trend}
               </span>
             </div>
             <div className="mt-4 h-1 w-full bg-slate-50 rounded-full overflow-hidden">
-               <div className={`h-full ${stat.label === 'Total Expenses' ? 'bg-rose-400' : 'bg-emerald-400'} animate-pulse`} style={{ width: '60%' }}></div>
+               <div className={`h-full ${stat.label === 'Total Expenses' || stat.label === 'Refunded Payments' ? 'bg-rose-400' : 'bg-emerald-400'} animate-pulse`} style={{ width: '60%' }}></div>
             </div>
           </div>
         ))}

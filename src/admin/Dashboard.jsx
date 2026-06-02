@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import api from '../api'
 
 function formatMoney(value) {
@@ -19,12 +19,17 @@ function formatDate(dateStr) {
 }
 
 export default function AdminDashboard() {
+  const [timeframe, setTimeframe] = useState('month') // 'month' or 'year'
   const [owners, setOwners] = useState([])
   const [summary, setSummary] = useState(null)
+  const [monthlySummary, setMonthlySummary] = useState(null)
+  const [yearlySummary, setYearlySummary] = useState(null)
+  const [billing, setBilling] = useState([])
+  const [allPayments, setAllPayments] = useState([])
+  const [globalFee, setGlobalFee] = useState(0)
   const [recentLogged, setRecentLogged] = useState([])
   const [onlineUsers, setOnlineUsers] = useState([])
   const [error, setError] = useState('')
-  const [monthlyPromotions, setMonthlyPromotions] = useState(0)
 
   const currentDate = new Date()
   const currentMonthLabel = currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
@@ -34,17 +39,19 @@ export default function AdminDashboard() {
   useEffect(() => {
     let active = true
     Promise.all([
-      api.get('/admin/owners'), 
+      api.get('/admin/owners'),
       api.get('/admin/billing/summary'),
       api.get('/admin/billing/summary', { params: { year: currentYear, month: currentMonth } }),
+      api.get('/admin/billing/summary', { params: { year: currentYear } }),
       api.get('/admin/users/recent-logged'),
       api.get('/admin/users/online')
     ])
-      .then(([ownersRes, summaryRes, monthlySummaryRes, recentLoggedRes, onlineUsersRes]) => {
+      .then(([ownersRes, summaryRes, monthlySummaryRes, yearlySummaryRes, recentLoggedRes, onlineUsersRes]) => {
         if (!active) return
         setOwners(ownersRes.data.data || [])
         setSummary(summaryRes.data.data || null)
-        setMonthlyPromotions(Number(monthlySummaryRes.data.data?.promotionCount || 0))
+        setMonthlySummary(monthlySummaryRes.data.data || null)
+        setYearlySummary(yearlySummaryRes.data.data || null)
         setRecentLogged(recentLoggedRes.data.data || [])
         setOnlineUsers(onlineUsersRes.data.data || [])
         setError('')
@@ -58,21 +65,107 @@ export default function AdminDashboard() {
     }
   }, [])
 
+  const billingQueryParams = useMemo(() => {
+    if (timeframe === 'year') {
+      return { year: currentYear }
+    }
+    return { year: currentYear, month: String(currentMonth).padStart(2, '0') }
+  }, [timeframe, currentYear, currentMonth])
+
+  useEffect(() => {
+    let active = true
+    Promise.all([
+      api.get('/admin/billing', { params: billingQueryParams }),
+      api.get('/admin/owner-payments', { params: { ...billingQueryParams, status: 'approved' } }),
+      api.get('/admin/settings')
+    ])
+      .then(([billingRes, paymentsRes, settingsRes]) => {
+        if (!active) return
+        setBilling(billingRes.data.data || [])
+        setAllPayments(paymentsRes.data.data || [])
+        const fee = settingsRes.data.data?.global_billing_amount
+        setGlobalFee(fee ? Number(fee) : 0)
+      })
+      .catch((err) => {
+        if (!active) return
+        setError(err.response?.data?.message || 'Failed to load billing data')
+      })
+    return () => {
+      active = false
+    }
+  }, [billingQueryParams])
+
   const propertyTotal = owners.reduce((sum, owner) => sum + Number(owner.propertyCount || 0), 0)
+  const activeSummary = timeframe === 'month' ? monthlySummary : yearlySummary
+
+  const ownerRows = useMemo(() => {
+    const billingMap = new Map()
+    billing.forEach((record) => {
+      if (!billingMap.has(record.ownerId)) billingMap.set(record.ownerId, record)
+    })
+    const paymentsMap = new Map()
+    allPayments.forEach((p) => {
+      const current = paymentsMap.get(p.ownerId) || 0
+      paymentsMap.set(p.ownerId, current + Number(p.amount))
+    })
+    return owners.map((owner) => {
+      const record = billingMap.get(owner.id)
+      const realPaid = paymentsMap.get(owner.id) || 0
+      const ownerPrice = owner.packagePrice != null ? Number(owner.packagePrice) : globalFee
+      if (record) {
+        const isPromo = record.isPromotion === 1
+        const due = Number(record.amountDue || 0)
+        const paid = Number(record.amountPaid || 0)
+        const computedStatus = isPromo ? 'promotion' : (due === 0 || paid >= due ? 'paid' : (paid > 0 ? 'partial' : 'pending'))
+        return {
+          ...record,
+          amountPaid: paid,
+          status: computedStatus,
+          ownerPackagePrice: ownerPrice,
+        }
+      }
+      const due = ownerPrice
+      const paid = realPaid
+      const computedStatus = due === 0 || paid >= due ? 'paid' : (paid > 0 ? 'partial' : 'pending')
+      return {
+        ownerId: owner.id,
+        status: computedStatus,
+        amountDue: due,
+        amountPaid: paid,
+        ownerPackagePrice: ownerPrice,
+      }
+    })
+  }, [owners, billing, allPayments, globalFee])
+
+  const realTotalPaid = useMemo(() => ownerRows.reduce((acc, r) => acc + Number(r.amountPaid || 0), 0), [ownerRows])
+  const realTotalDue = useMemo(() => ownerRows.reduce((acc, r) => acc + Math.max(0, Number(r.amountDue || 0) - Number(r.amountPaid || 0)), 0), [ownerRows])
+  const realPaidCount = useMemo(() => ownerRows.filter(r => r.status === 'paid').length, [ownerRows])
+  const realUnpaidCount = useMemo(() => ownerRows.filter(r => r.status !== 'paid').length, [ownerRows])
+  const promoCount = useMemo(() => billing.filter(b => b.isPromotion === 1).length, [billing])
 
   return (
     <div className="space-y-6">
       {/* Header Section */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <p className="text-lg md:text-[13px] font-bold uppercase  text-blue-600">Dashboard</p>
-          <h1 className="hidden md:block  md:text-2xl font-black text-slate-900 tracking-tight">Admin Console</h1>
+          <p className="text-lg md:text-[13px] font-bold uppercase text-blue-600">Dashboard</p>
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight mt-0.5">Admin Console</h1>
         </div>
-        <div className="flex items-center gap-2 bg-white border border-slate-100 p-1 rounded-xl shadow-sm">
-          <div className="px-3 py-1 text-[13px] font-bold text-slate-500 uppercase tracking-widest border-r border-slate-100">Live Status</div>
-          <div className="flex items-center gap-1.5 px-2 py-1">
-            <div className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[13px] font-bold text-emerald-600 uppercase">Operational</span>
+        <div className="flex items-center gap-4">
+          {/* Timeframe Toggle Buttons */}
+          <div className="flex bg-slate-100 p-1 rounded-xl shadow-sm border border-slate-200/40">
+            <button
+              onClick={() => setTimeframe('month')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === 'month' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-950'}`}
+            >
+              This Month
+            </button>
+            <button
+              onClick={() => setTimeframe('year')}
+              className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${timeframe === 'year' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-950'}`}
+            >
+              This Year
+            </button>
           </div>
         </div>
       </div>
@@ -84,8 +177,8 @@ export default function AdminDashboard() {
         {[
           { label: 'Platform Owners', value: owners.length, icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197', color: 'blue' },
           { label: 'Active Properties', value: propertyTotal, icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6', color: 'indigo' },
-          { label: 'Total Revenue', value: formatMoney(summary?.totalPaid), icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'emerald' },
-          { label: 'Outstanding', value: formatMoney((summary?.totalDue || 0) - (summary?.totalPaid || 0)), icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', color: 'rose' },
+          { label: 'Total Revenue', value: formatMoney(realTotalPaid), icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z', color: 'emerald' },
+          { label: 'Outstanding', value: formatMoney(realTotalDue), icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z', color: 'rose' },
         ].map((metric) => (
           <div key={metric.label} className="group admin-card !p-4 hover:border-blue-200 transition-all">
             <div className="flex items-center justify-between mb-2">
@@ -98,7 +191,7 @@ export default function AdminDashboard() {
             <h3 className="text-lg font-black text-slate-900 tracking-tight mt-1">{metric.value}</h3>
           </div>
         ))}
-        {/* Promotions This Month — special violet card */}
+        {/* Promotions Given — special violet card */}
         <div className="group admin-card !p-4 hover:border-violet-200 transition-all border-violet-100 bg-violet-50/40">
           <div className="flex items-center justify-between mb-2">
             <div className="p-2 rounded-lg bg-violet-100 text-violet-600">
@@ -106,10 +199,14 @@ export default function AdminDashboard() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.364 1.118l1.519 4.674c.3.921-.755 1.688-1.54 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.784.57-1.838-.197-1.54-1.118l1.52-4.674a1 1 0 00-.365-1.118L2.98 10.101c-.783-.57-.38-1.81.588-1.81h4.915a1 1 0 00.951-.69l1.515-4.674z" />
               </svg>
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-violet-400">This Month</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-violet-400">
+              {timeframe === 'month' ? 'This Month' : 'This Year'}
+            </span>
           </div>
           <p className="text-[13px] font-bold text-violet-500 uppercase tracking-widest">Promotions Given</p>
-          <h3 className="text-lg font-black tracking-tight mt-1" style={{ color: '#7c3aed' }}>{monthlyPromotions}</h3>
+          <h3 className="text-lg font-black tracking-tight mt-1" style={{ color: '#7c3aed' }}>
+            {promoCount}
+          </h3>
         </div>
       </div>
 
@@ -151,7 +248,9 @@ export default function AdminDashboard() {
         {/* Payment Distribution Section */}
         <div className="admin-card !p-0 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
-            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest">Financial Statistics for {currentMonthLabel}</h2>
+            <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest">
+              Financial Statistics for {timeframe === 'month' ? currentMonthLabel : currentYear}
+            </h2>
             <div className="h-2 w-2 rounded-full bg-blue-500 shadow-sm shadow-blue-200" />
           </div>
           <div className="p-6 space-y-8">
@@ -159,16 +258,16 @@ export default function AdminDashboard() {
               <div className="flex justify-between items-end">
                 <div>
                   <p className="text-[13px] font-bold text-slate-400 uppercase tracking-widest mb-1">Settled Accounts for </p>
-                  <p className="text-xl font-black text-slate-900 tracking-tight">{Number(summary?.paidCount || 0)}</p>
+                  <p className="text-xl font-black text-slate-900 tracking-tight">{realPaidCount}</p>
                 </div>
                 <span className="text-[13px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">
-                  {Math.round((Number(summary?.paidCount || 0) / (Number(summary?.paidCount || 0) + Number(summary?.unpaidCount || 0) || 1)) * 100)}%
+                  {Math.round((realPaidCount / (realPaidCount + realUnpaidCount || 1)) * 100)}%
                 </span>
               </div>
               <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
-                  style={{ width: `${(Number(summary?.paidCount || 0) / (Number(summary?.paidCount || 0) + Number(summary?.unpaidCount || 0) || 1)) * 100}%` }}
+                  style={{ width: `${(realPaidCount / (realPaidCount + realUnpaidCount || 1)) * 100}%` }}
                 />
               </div>
             </div>
@@ -177,21 +276,19 @@ export default function AdminDashboard() {
               <div className="flex justify-between items-end">
                 <div>
                   <p className="text-[13px] font-bold text-slate-400 uppercase tracking-widest mb-1">Pending Settlements</p>
-                  <p className="text-xl font-black text-slate-900 tracking-tight">{Number(summary?.unpaidCount || 0)}</p>
+                  <p className="text-xl font-black text-slate-900 tracking-tight">{realUnpaidCount}</p>
                 </div>
                 <span className="text-[13px] font-bold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                  {Math.round((Number(summary?.unpaidCount || 0) / (Number(summary?.paidCount || 0) + Number(summary?.unpaidCount || 0) || 1)) * 100)}%
+                  {Math.round((realUnpaidCount / (realPaidCount + realUnpaidCount || 1)) * 100)}%
                 </span>
               </div>
               <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
                 <div 
                   className="h-full bg-amber-400 rounded-full transition-all duration-1000" 
-                  style={{ width: `${(Number(summary?.unpaidCount || 0) / (Number(summary?.paidCount || 0) + Number(summary?.unpaidCount || 0) || 1)) * 100}%` }}
+                  style={{ width: `${(realUnpaidCount / (realPaidCount + realUnpaidCount || 1)) * 100}%` }}
                 />
               </div>
             </div>
-
-           
           </div>
         </div>
       </div>

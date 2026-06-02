@@ -22,7 +22,7 @@ function getCurrentMonthFilters() {
     q: '',
     status: 'all',
     year: String(now.getFullYear()),
-    month: '', // Empty means all months
+    month: String(now.getMonth() + 1).padStart(2, '0'), // Current month by default
     day: '',
     startDate: '',
     endDate: '',
@@ -43,6 +43,14 @@ function formatPeriodLabel(filters) {
     }
   }
   return 'Current period'
+}
+
+function formatApprovalDescription(value) {
+  if (!value) return '—'
+  const lastParenIndex = value.lastIndexOf(')')
+  if (lastParenIndex === -1) return value
+  const trimmed = value.slice(lastParenIndex + 1).trim()
+  return trimmed || value
 }
 
 const defaultPayForm = {
@@ -96,7 +104,6 @@ export default function AdminPayments() {
   const queryParams = useMemo(() => {
     const params = {}
     if (filters.q) params.q = filters.q
-    if (filters.status && filters.status !== 'all') params.status = filters.status
     if (filters.year) params.year = filters.year
     if (filters.month) params.month = filters.month
     if (filters.day) params.day = filters.day
@@ -159,15 +166,18 @@ export default function AdminPayments() {
   useEffect(() => {
     let active = true
     if (tab !== 'approval') return undefined
-    api.get('/admin/owner-payments', { params: { status: 'pending' } })
-      .then((res) => {
+    const fetchPendingApprovals = async () => {
+      try {
+        const res = await api.get('/admin/owner-payments', { params: { status: 'pending' } })
         if (!active) return
         setApprovalItems(res.data.data || [])
-      })
-      .catch(() => {
+      } catch {
         if (!active) return
         setApprovalItems([])
-      })
+      }
+    }
+
+    fetchPendingApprovals()
     return () => { active = false }
   }, [tab])
 
@@ -303,7 +313,8 @@ export default function AdminPayments() {
   const updateApprovalStatus = async (paymentId, status) => {
     try {
       await api.patch(`/admin/owner-payments/${paymentId}/status`, { status })
-      setApprovalItems((prev) => prev.map(p => p.id === paymentId ? { ...p, status } : p))
+      const res = await api.get('/admin/owner-payments', { params: { status: 'pending' } })
+      setApprovalItems(res.data.data || [])
       setRefreshKey(k => k + 1)
       showToast('Payment status updated', 'success')
     } catch (err) {
@@ -326,27 +337,31 @@ export default function AdminPayments() {
     return owners.map((owner) => {
       const record = billingMap.get(owner.id)
       const realPaid = paymentsMap.get(owner.id) || 0
-      // Use the owner's real packagePrice from the owners endpoint (now returned by API)
       const ownerPrice = owner.packagePrice != null ? Number(owner.packagePrice) : globalFee
       if (record) {
         const isPromo = record.isPromotion === 1
+        const due = Number(record.amountDue || 0)
+        const paid = Number(record.amountPaid || 0)
+        const computedStatus = isPromo ? 'promotion' : (due === 0 || paid >= due ? 'paid' : (paid > 0 ? 'partial' : 'pending'))
         return {
           ...record,
           ownerName: `${owner.firstName} ${owner.lastName}`,
-          amountPaid: Number(record.amountPaid || 0),
-          status: isPromo ? 'promotion' : record.status,
+          amountPaid: paid,
+          status: computedStatus,
           ownerPackagePrice: ownerPrice,
         }
       }
-      const isPaid = realPaid >= ownerPrice && ownerPrice > 0
+      const due = ownerPrice
+      const paid = realPaid
+      const computedStatus = due === 0 || paid >= due ? 'paid' : (paid > 0 ? 'partial' : 'pending')
       return {
         ownerId: owner.id,
         firstName: owner.firstName,
         lastName: owner.lastName,
         contact: owner.contact,
-        status: isPaid ? 'paid' : (realPaid > 0 ? 'partial' : 'pending'),
-        amountDue: ownerPrice,
-        amountPaid: realPaid,
+        status: computedStatus,
+        amountDue: due,
+        amountPaid: paid,
         periodStart: '',
         periodEnd: '',
         ownerPackagePrice: ownerPrice,
@@ -354,11 +369,27 @@ export default function AdminPayments() {
     })
   }, [owners, billing, allPayments, globalFee])
 
-  const totalPages = Math.max(1, Math.ceil(ownerRows.length / PAGE_SIZE))
+  const filteredOwnerRows = useMemo(() => {
+    if (!filters.status || filters.status === 'all') return ownerRows
+    const todayStr = new Date().toISOString().split('T')[0]
+    return ownerRows.filter(row => {
+      if (filters.status === 'promotions') {
+        return row.status === 'promotion'
+      }
+      if (filters.status === 'overdue') {
+        const isUnpaid = row.status === 'pending' || row.status === 'partial'
+        const hasPassed = row.periodEnd ? row.periodEnd.split('T')[0] < todayStr : false
+        return isUnpaid && hasPassed
+      }
+      return row.status === filters.status
+    })
+  }, [ownerRows, filters.status])
+
+  const totalPages = Math.max(1, Math.ceil(filteredOwnerRows.length / PAGE_SIZE))
   const pagedRows = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE
-    return ownerRows.slice(start, start + PAGE_SIZE)
-  }, [ownerRows, page])
+    return filteredOwnerRows.slice(start, start + PAGE_SIZE)
+  }, [filteredOwnerRows, page])
 
   const realTotalPaid = useMemo(() => ownerRows.reduce((acc, r) => acc + Number(r.amountPaid || 0), 0), [ownerRows])
   const realTotalDue = useMemo(() => ownerRows.reduce((acc, r) => acc + Math.max(0, Number(r.amountDue || 0) - Number(r.amountPaid || 0)), 0), [ownerRows])
@@ -388,7 +419,14 @@ export default function AdminPayments() {
               onClick={() => setTab('approval')}
               className={`px-6 py-2.5 rounded-xl text-base font-bold transition-all ${tab === 'approval' ? 'bg-white text-blue-600 shadow-sm' : 'text-slate-500 hover:text-slate-900'}`}
             >
-              Pending Approvals
+              <span className="inline-flex items-center gap-2">
+                Pending Approvals
+                {approvalItems.length > 0 && (
+                  <span className="inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-rose-500 px-1.5 text-[11px] font-black text-white">
+                    {approvalItems.length}
+                  </span>
+                )}
+              </span>
             </button>
           </div>
         </div>
@@ -444,13 +482,29 @@ export default function AdminPayments() {
                   </svg>
                 </div>
               </div>
-              <div className="admin-filter-group w-32">
+              <div className="admin-filter-group w-36">
                 <label className="admin-filter-label">From Date</label>
-                <input type="date" className="admin-filter-input" value={filters.startDate} onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))} />
+                <input
+                  type="date"
+                  className="admin-filter-input cursor-pointer"
+                  value={filters.startDate}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, startDate: e.target.value }))}
+                  onClick={(e) => {
+                    try { e.target.showPicker(); } catch (err) {}
+                  }}
+                />
               </div>
-              <div className="admin-filter-group w-32">
+              <div className="admin-filter-group w-36">
                 <label className="admin-filter-label">To Date</label>
-                <input type="date" className="admin-filter-input" value={filters.endDate} onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))} />
+                <input
+                  type="date"
+                  className="admin-filter-input cursor-pointer"
+                  value={filters.endDate}
+                  onChange={(e) => setFilters((prev) => ({ ...prev, endDate: e.target.value }))}
+                  onClick={(e) => {
+                    try { e.target.showPicker(); } catch (err) {}
+                  }}
+                />
               </div>
               <div className="admin-filter-group w-32">
                 <label className="admin-filter-label">Month</label>
@@ -638,29 +692,58 @@ export default function AdminPayments() {
             <h2 className="text-lg font-semibold">Pending Approvals</h2>
             <span className="text-base text-slate-400">{approvalItems.length} pending</span>
           </div>
-          <div className="mt-4 space-y-3">
+          <div className="mt-4">
             {approvalItems.length === 0 ? (
               <p className="text-base text-slate-400">No pending payments.</p>
             ) : (
-              approvalItems.map((item) => (
-                <div key={item.id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="text-base font-semibold text-slate-900">{item.firstName} {item.lastName}</p>
-                      <p className="text-sm text-slate-500">{item.contact}</p>
-                    </div>
-                    <div className="text-base text-slate-700">{formatMoney(item.amount)}</div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-slate-500">
-                    <span>{item.method}</span>
-                    {item.proofUrl && (<a href={item.proofUrl} className="underline" target="_blank" rel="noreferrer">View proof</a>)}
-                  </div>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    <button className="admin-button-primary" onClick={() => updateApprovalStatus(item.id, 'approved')}>Approve</button>
-                    <button className="admin-button-secondary" onClick={() => updateApprovalStatus(item.id, 'rejected')}>Reject</button>
-                  </div>
-                </div>
-              ))
+              <div className="overflow-x-auto">
+                <table className="admin-table">
+                  <thead>
+                    <tr>
+                      <th>Owner</th>
+                      <th>Contact</th>
+                      <th>Description</th>
+                      <th>Paid Date</th>
+                      <th>Remaining</th>
+                      <th>Amount</th>
+                      <th>Method</th>
+                      <th>Proof</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {approvalItems.map((item) => (
+                      <tr key={item.id} className="admin-table-row">
+                        <td className="font-bold text-slate-900">{item.firstName} {item.lastName}</td>
+                        <td className="text-slate-500">{item.contact}</td>
+                        <td className="text-slate-500">{formatApprovalDescription(item.note || item.description)}</td>
+                        <td className="text-slate-500">{item.paidAt ? new Date(item.paidAt).toLocaleDateString() : '—'}</td>
+                        <td className="font-bold text-rose-600">
+                          {item.billingAmountDue != null
+                            ? formatMoney(Math.max(0, Number(item.billingAmountDue || 0) - Number(item.billingAmountPaid || 0)))
+                            : '—'
+                          }
+                        </td>
+                        <td className="font-bold text-slate-700">{formatMoney(item.amount)}</td>
+                        <td className="text-slate-500 uppercase text-[12px] font-bold">{item.method}</td>
+                        <td>
+                          {item.proofUrl ? (
+                            <a href={item.proofUrl} className="text-blue-600 underline font-bold text-[12px]" target="_blank" rel="noreferrer">View proof</a>
+                          ) : (
+                            <span className="text-slate-400 text-[12px] font-bold">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="flex flex-wrap gap-2">
+                            <button className="admin-button-primary !py-1.5 !px-3" onClick={() => updateApprovalStatus(item.id, 'approved')}>Approve</button>
+                            <button className="admin-button-secondary !py-1.5 !px-3" onClick={() => updateApprovalStatus(item.id, 'rejected')}>Reject</button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>

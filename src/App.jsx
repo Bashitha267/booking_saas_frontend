@@ -24,6 +24,8 @@ import PropertyManagement from './hotel/Property_managment'
 import Account from './hotel/Account'
 import SystemBilling from './hotel/SystemBilling'
 import Guests from './hotel/Guests'
+import BookingInvoice from './hotel/BookingInvoice'
+
 
 function RequireAuth({ children }) {
   const { user } = useAuth()
@@ -45,6 +47,7 @@ export default function App() {
       <Route path="/register" element={<Register />} />
 
       {/* Hotel Routes */}
+      <Route path="/hotel/bookings/:id/invoice" element={<RequireAuth><RequireRole allowed={['owner', 'admin', 'staff']}><BookingInvoice /></RequireRole></RequireAuth>} />
       <Route path="/hotel" element={<RequireAuth><HotelLayout /></RequireAuth>}>
         <Route index element={<RequireRole allowed={['owner', 'admin', 'staff']}><HotelDashboard /></RequireRole>} />
         <Route path="bookings" element={<RequireRole allowed={['owner', 'admin', 'staff']}><BookingHistory /></RequireRole>} />

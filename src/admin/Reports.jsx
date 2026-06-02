@@ -543,15 +543,15 @@ export default function AdminReports() {
               {/* Totals row */}
               {!loading && (
                 <tr className="bg-slate-900 text-white">
-                  <td className="font-black py-4">TOTAL</td>
-                  <td className="font-bold">—</td>
-                  <td className="font-black text-blue-300">{formatMoney(totals.totalExpected)}</td>
-                  <td className="font-black text-emerald-300">{formatMoney(totals.totalRevenue)}</td>
-                  <td className="font-black text-violet-300">
+                  <td className="font-black py-4 !text-white">TOTAL</td>
+                  <td className="font-bold !text-slate-400">—</td>
+                  <td className="font-black !text-blue-300">{formatMoney(totals.totalExpected)}</td>
+                  <td className="font-black !text-emerald-300">{formatMoney(totals.totalRevenue)}</td>
+                  <td className="font-black !text-violet-300">
                     {totals.totalPromotions || 0} ({formatMoney(totals.totalPromotionValue)})
                   </td>
-                  <td className="font-black text-rose-300">{formatMoney(totals.outstanding)}</td>
-                  <td className="font-bold">—</td>
+                  <td className="font-black !text-rose-300">{formatMoney(totals.outstanding)}</td>
+                  <td className="font-bold !text-slate-400">—</td>
                 </tr>
               )}
             </tbody>
