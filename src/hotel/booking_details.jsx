@@ -41,7 +41,7 @@ export default function BookingDetails() {
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const totalPaid = payments.filter(pay => pay.status !== 'refunded').reduce((sum, pay) => sum + pay.amount, 0);
   const totalRefunded = payments.filter(pay => pay.status === 'refunded').reduce((sum, pay) => sum + pay.amount, 0);
-  const grandTotal = roomTotal + totalExpenses;
+  const grandTotal = roomTotal + totalExpenses - Number(booking?.discount || 0);
   const balanceDue = grandTotal - totalPaid;
 
   const currentPaymentStatus = useMemo(() => {
@@ -116,6 +116,7 @@ export default function BookingDetails() {
           children: bookingData.children,
           propertyId: bookingData.propertyId,
           roomPrice: Number(bookingData.roomPrice || 0),
+          discount: Number(bookingData.discount || 0),
         };
 
         // Parse booking expenses from DB column
@@ -168,6 +169,7 @@ export default function BookingDetails() {
             adults: Number(bookingData.adults || 0),
             children: Number(bookingData.children || 0),
             status: bookingData.status || 'pending',
+            discount: Number(bookingData.discount || 0),
           });
           setPayments(bookingPayments);
         }
@@ -383,6 +385,7 @@ export default function BookingDetails() {
       adults: Number(booking.adults || 0),
       children: Number(booking.children || 0),
       status: booking.status || 'pending',
+      discount: Number(booking.discount || 0),
     });
     setDetailsMessage({ type: '', message: '' });
     setIsEditingDetails(true);
@@ -421,6 +424,7 @@ export default function BookingDetails() {
         children: Number(editForm.children || 0),
         status: editForm.status,
         notes: notesValue || null,
+        discount: Number(editForm.discount || 0),
       });
 
       const updatedAdults = Number(editForm.adults || 0);
@@ -439,6 +443,7 @@ export default function BookingDetails() {
         children: updatedChildren,
         guestCount: updatedAdults + updatedChildren || 1,
         status: editForm.status,
+        discount: Number(editForm.discount || 0),
       }));
 
       setDetailsMessage({ type: 'success', message: 'Booking updated successfully.' });
@@ -601,7 +606,7 @@ export default function BookingDetails() {
       <div className="space-y-8 max-w-5xl mx-auto relative z-10">
         
         {/* Fieldset 1: Booking Information */}
-        <fieldset className="border border-slate-300 p-6 rounded-md bg-white">
+        <fieldset className="border border-slate-300 p-6 rounded-md bg-white min-w-0">
           <legend className="px-2 text-sm font-bold text-blue-600 uppercase tracking-wide">Booking Information</legend>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -683,7 +688,7 @@ export default function BookingDetails() {
                 )}
               </div>
 
-              <div className="flex gap-4">
+              <div className="flex flex-wrap gap-4">
                 <div>
                   <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Adults</label>
                   {isEditingDetails ? (
@@ -712,6 +717,21 @@ export default function BookingDetails() {
                     <p className="text-sm font-semibold text-slate-700">{booking.children}</p>
                   )}
                 </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Discount (LKR)</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="w-32 border border-slate-300 rounded px-3 py-1 text-sm outline-none focus:border-blue-600"
+                      value={editForm.discount}
+                      onChange={handleEditChange('discount')}
+                    />
+                  ) : (
+                    <p className="text-sm font-bold text-rose-650">Rs. {Number(booking.discount || 0).toFixed(2)}</p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -737,7 +757,7 @@ export default function BookingDetails() {
                   {isEditingDetails ? (
                     <input
                       type="date"
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                      className="w-full border border-slate-300 rounded px-3 h-[38px] text-sm outline-none focus:border-blue-600"
                       value={editForm.checkInDate}
                       onChange={handleEditChange('checkInDate')}
                     />
@@ -750,7 +770,7 @@ export default function BookingDetails() {
                   {isEditingDetails ? (
                     <input
                       type="date"
-                      className="w-full border border-slate-300 rounded px-3 py-1.5 text-sm outline-none focus:border-blue-600"
+                      className="w-full border border-slate-300 rounded px-3 h-[38px] text-sm outline-none focus:border-blue-600"
                       value={editForm.checkOutDate}
                       onChange={handleEditChange('checkOutDate')}
                     />
@@ -764,7 +784,7 @@ export default function BookingDetails() {
         </fieldset>
 
         {/* Fieldset 2: Costs & Extra Charges */}
-        <fieldset className="border border-slate-300 p-6 rounded-md bg-white">
+        <fieldset className="border border-slate-300 p-6 rounded-md bg-white min-w-0">
           <legend className="px-2 text-sm font-bold text-blue-600 uppercase tracking-wide">Costs & Extra Charges</legend>
 
           {/* Quick Charge Buttons */}
@@ -908,7 +928,7 @@ export default function BookingDetails() {
         </fieldset>
 
         {/* Fieldset 3: Financial Summary & Ledger */}
-        <fieldset className="border border-slate-300 p-6 rounded-md bg-white">
+        <fieldset className="border border-slate-300 p-6 rounded-md bg-white min-w-0">
           <legend className="px-2 text-sm font-bold text-blue-600 uppercase tracking-wide">Financial Summary & Ledger</legend>
           
           <div className="space-y-6">
@@ -918,37 +938,45 @@ export default function BookingDetails() {
               <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-1">Cost Breakdown</h3>
               <div className="w-full space-y-2 text-xs font-medium text-slate-700">
                 {/* Room Charge Row */}
-                <div className="flex justify-between items-center py-1">
+                <div className="flex justify-between items-start gap-4 py-1">
                   <span>Room Stay Charge (Room {booking.roomNumber} · {nights} {nights === 1 ? 'night' : 'nights'} × Rs. {roomPrice.toFixed(2)})</span>
-                  <span className="font-semibold text-slate-900">Rs. {roomTotal.toFixed(2)}</span>
+                  <span className="font-semibold text-slate-900 shrink-0">Rs. {roomTotal.toFixed(2)}</span>
                 </div>
 
                 {/* Extra Charges Row */}
-                <div className="flex justify-between items-center py-1">
+                <div className="flex justify-between items-start gap-4 py-1">
                   <span>Extra Charges & Expenses ({expenses.length} configured)</span>
-                  <span className="font-semibold text-slate-900">Rs. {totalExpenses.toFixed(2)}</span>
+                  <span className="font-semibold text-slate-900 shrink-0">Rs. {totalExpenses.toFixed(2)}</span>
                 </div>
+
+                {/* Discount Row */}
+                {booking && Number(booking.discount || 0) > 0 && (
+                  <div className="flex justify-between items-start gap-4 py-1 text-rose-600">
+                    <span>Discount Applied</span>
+                    <span className="font-semibold shrink-0">- Rs. {Number(booking.discount).toFixed(2)}</span>
+                  </div>
+                )}
 
                 {/* Single line above Grand Total */}
                 <div className="border-t border-slate-350 my-2"></div>
 
                 {/* Grand Total Row */}
-                <div className="flex justify-between items-center py-1 font-bold text-slate-900">
+                <div className="flex justify-between items-center gap-4 py-1 font-bold text-slate-900">
                   <span className="uppercase text-[10px] tracking-wider">Grand Total</span>
-                  <span className="text-sm font-black">Rs. {grandTotal.toFixed(2)}</span>
+                  <span className="text-sm font-black shrink-0">Rs. {grandTotal.toFixed(2)}</span>
                 </div>
 
                 {/* Total Paid Row */}
-                <div className="flex justify-between items-center py-1 text-slate-800 font-bold text-sm">
+                <div className="flex justify-between items-center gap-4 py-1 text-slate-800 font-bold text-sm">
                   <span>Total Paid (Ledger)</span>
-                  <span className="text-emerald-700 text-base font-black">Rs. {totalPaid.toFixed(2)}</span>
+                  <span className="text-emerald-700 text-base font-black shrink-0">Rs. {totalPaid.toFixed(2)}</span>
                 </div>
 
                 {/* Total Refunded Row */}
                 {totalRefunded > 0 && (
-                  <div className="flex justify-between items-center py-1 text-red-600 font-bold text-sm">
+                  <div className="flex justify-between items-center gap-4 py-1 text-red-600 font-bold text-sm">
                     <span>Total Refunded</span>
-                    <span className="text-red-600 text-base font-black line-through">Rs. {totalRefunded.toFixed(2)}</span>
+                    <span className="text-red-600 text-base font-black line-through shrink-0">Rs. {totalRefunded.toFixed(2)}</span>
                   </div>
                 )}
 
@@ -956,9 +984,9 @@ export default function BookingDetails() {
                 <div className="border-t border-slate-350 my-2"></div>
 
                 {/* Balance Due Row */}
-                <div className={`flex justify-between items-center py-1.5 font-bold ${balanceDue > 0 ? 'text-red-900' : 'text-emerald-800'}`}>
+                <div className={`flex justify-between items-center gap-4 py-1.5 font-bold ${balanceDue > 0 ? 'text-red-900' : 'text-emerald-800'}`}>
                   <span className="uppercase text-[10px] tracking-wider">Balance Due</span>
-                  <span className="text-base font-black border-b-[3px] border-double border-current pb-0.5">
+                  <span className="text-base font-black border-b-[3px] border-double border-current pb-0.5 shrink-0">
                     Rs. {Math.max(0, balanceDue).toFixed(2)}
                   </span>
                 </div>

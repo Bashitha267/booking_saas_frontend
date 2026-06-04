@@ -2,6 +2,8 @@ import React from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Login from './Login'
 import Register from './Register'
+import ForgotPassword from './ForgotPassword'
+import ResetPassword from './ResetPassword'
 import Dashboard from './pages/Dashboard'
 import {
   AdminLayout,
@@ -45,6 +47,8 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Hotel Routes */}
       <Route path="/hotel/bookings/:id/invoice" element={<RequireAuth><RequireRole allowed={['owner', 'admin', 'staff']}><BookingInvoice /></RequireRole></RequireAuth>} />

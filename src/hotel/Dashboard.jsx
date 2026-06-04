@@ -136,7 +136,26 @@ export default function Dashboard() {
     const nextDate = date || new Date();
     setSelectedDate(nextDate);
     setCheckInDate(formatLocalDate(nextDate));
-    setBookingForm((prev) => ({ ...prev, roomIds: [] }));
+    
+    const nextDay = new Date(nextDate);
+    nextDay.setDate(nextDay.getDate() + 1);
+    const formattedCheckOut = formatLocalDate(nextDay);
+
+    setBookingForm({
+      guestName: '',
+      guestContact: '',
+      guestNic: '',
+      country: '',
+      address: '',
+      checkOutDate: formattedCheckOut,
+      adults: 1,
+      children: 0,
+      roomType: '',
+      roomIds: [],
+      paymentStatus: 'none',
+      paymentMethod: 'cash',
+      paymentAmount: '',
+    });
     setShowAddBooking(true);
     setSubmitStatus({ type: '', message: '' });
   };
@@ -427,6 +446,13 @@ export default function Dashboard() {
       return;
     }
 
+    const start = new Date(checkInDate);
+    const end = new Date(bookingForm.checkOutDate);
+    if (end <= start) {
+      setSubmitStatus({ type: 'error', message: 'Check-out date must be after Check-in date.' });
+      return;
+    }
+
     const paymentEnabled = bookingForm.paymentStatus !== 'none';
     const paymentAmountValue = Number(bookingForm.paymentAmount || 0);
     if (paymentEnabled && paymentAmountValue <= 0) {
@@ -459,16 +485,13 @@ export default function Dashboard() {
         .filter(Boolean);
 
       if (paymentEnabled && createdBookingIds.length) {
-        await Promise.all(
-          createdBookingIds.map((bookingId) =>
-            api.post('/payments', {
-              bookingId,
-              amount: paymentAmountValue,
-              method: bookingForm.paymentMethod,
-              status: bookingForm.paymentStatus,
-            })
-          )
-        );
+        await api.post('/payments', {
+          bookingId: createdBookingIds[0],
+          amount: paymentAmountValue,
+          method: bookingForm.paymentMethod,
+          status: bookingForm.paymentStatus,
+          note: 'Advance Payment',
+        });
       }
 
       setSubmitStatus({ type: 'success', message: 'Reservation created successfully!' });
@@ -654,8 +677,8 @@ export default function Dashboard() {
       {/* Add Booking Modal */}
       {showAddBooking && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[110] flex items-center justify-center p-4 md:p-8">
-          <div className="bg-white w-full max-w-lg md:max-w-3xl rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300">
-            <div className="p-6 md:p-8 bg-blue-600 text-white flex items-center justify-between">
+          <div className="bg-white w-full max-w-lg md:max-w-3xl rounded-[2rem] shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-300 flex flex-col max-h-[90vh] md:max-h-[85vh]">
+            <div className="p-6 md:p-8 bg-blue-600 text-white flex items-center justify-between shrink-0">
               <div>
                 <h2 className="text-xl md:text-3xl font-black tracking-tight">New Reservation</h2>
                 <p className="text-[10px] md:text-xs font-bold opacity-80 uppercase tracking-widest mt-1">Check-in pre-set for {checkInDate || 'Selected date'}</p>
@@ -665,7 +688,7 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <div className="p-6 md:p-10 space-y-6 md:space-y-8 overflow-y-auto md:overflow-visible max-h-[85vh] md:max-h-none custom-scrollbar">
+            <div className="p-6 md:p-10 space-y-6 md:space-y-8 overflow-y-auto flex-1 custom-scrollbar">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Guest Full Name</label>
@@ -763,26 +786,39 @@ export default function Dashboard() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                <div className="space-y-2">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+                <div className="space-y-2 col-span-2 md:col-span-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Check-in</label>
                   <input
                     type="date"
                     value={checkInDate}
                     onChange={(e) => {
-                      setCheckInDate(e.target.value);
-                      setSelectedDate(e.target.value ? new Date(`${e.target.value}T00:00:00`) : null);
+                      const newCheckIn = e.target.value;
+                      setCheckInDate(newCheckIn);
+                      setSelectedDate(newCheckIn ? new Date(`${newCheckIn}T00:00:00`) : null);
+                      if (newCheckIn) {
+                        const inDate = new Date(newCheckIn);
+                        const outDate = bookingForm.checkOutDate ? new Date(bookingForm.checkOutDate) : null;
+                        if (!outDate || outDate <= inDate) {
+                          const nextDay = new Date(inDate);
+                          nextDay.setDate(nextDay.getDate() + 1);
+                          setBookingForm(prev => ({
+                            ...prev,
+                            checkOutDate: formatLocalDate(nextDay)
+                          }));
+                        }
+                      }
                     }}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-[46px] text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 col-span-2 md:col-span-1">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Check-out</label>
                   <input
                     type="date"
                     value={bookingForm.checkOutDate}
                     onChange={handleBookingChange('checkOutDate')}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-[46px] text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
                 <div className="space-y-2">
@@ -792,7 +828,7 @@ export default function Dashboard() {
                     min="1"
                     value={bookingForm.adults}
                     onChange={handleBookingChange('adults')}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-[46px] text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
                 <div className="space-y-2">
@@ -802,7 +838,7 @@ export default function Dashboard() {
                     min="0"
                     value={bookingForm.children}
                     onChange={handleBookingChange('children')}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-[46px] text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
               </div>
@@ -858,6 +894,66 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
+
+              {/* Selected Rooms Price Preview & Breakdown */}
+              {bookingForm.roomIds.length > 0 && (
+                <div className="bg-slate-55 border border-slate-200 rounded-3xl p-6 space-y-4">
+                  <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Selected Rooms & Price Breakdown</h4>
+                  <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto pr-1">
+                    {bookingForm.roomIds.map((roomId) => {
+                      const r = rooms.find((room) => room.id === roomId);
+                      if (!r) return null;
+                      const stayNights = (() => {
+                        if (!checkInDate || !bookingForm.checkOutDate) return 0;
+                        const start = new Date(checkInDate);
+                        const end = new Date(bookingForm.checkOutDate);
+                        const diff = end - start;
+                        return Math.max(0, Math.round(diff / (1000 * 60 * 60 * 24)));
+                      })();
+                      const roomTotal = Number(r.price || 0) * stayNights;
+                      return (
+                        <div key={roomId} className="py-2.5 flex items-center justify-between text-xs">
+                          <div>
+                            <p className="font-bold text-slate-800">Room {r.roomNumber} · <span className="text-[10px] text-slate-400 uppercase">{r.roomType}</span></p>
+                            <p className="text-[10px] text-slate-450 mt-0.5">
+                              Rate: Rs. {Number(r.price || 0).toLocaleString()} × {stayNights} {stayNights === 1 ? 'night' : 'nights'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-4">
+                            <span className="font-bold text-slate-900">Rs. {roomTotal.toLocaleString()}</span>
+                            <button
+                              type="button"
+                              onClick={() => toggleRoomSelection(roomId)}
+                              className="text-rose-500 hover:text-rose-700 p-1 rounded-full hover:bg-rose-50 transition-colors"
+                              title="Remove room"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="border-t border-slate-200 pt-3 flex justify-between items-center">
+                    <span className="text-xs font-black uppercase text-slate-600 tracking-wider">Total Stay Charge</span>
+                    <span className="text-sm font-black text-blue-600">
+                      Rs. {bookingForm.roomIds.reduce((sum, id) => {
+                        const r = rooms.find(room => room.id === id);
+                        const stayNights = (() => {
+                          if (!checkInDate || !bookingForm.checkOutDate) return 0;
+                          const start = new Date(checkInDate);
+                          const end = new Date(bookingForm.checkOutDate);
+                          const diff = end - start;
+                          return Math.max(0, Math.round(diff / (1000 * 60 * 60 * 24)));
+                        })();
+                        return sum + (Number(r?.price || 0) * stayNights);
+                      }, 0).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="pt-6">
                 <button

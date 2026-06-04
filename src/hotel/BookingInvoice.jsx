@@ -46,7 +46,8 @@ export default function BookingInvoice() {
           children: bookingData.children,
           propertyId: bookingData.propertyId,
           roomPrice: Number(bookingData.roomPrice || 0),
-          propertyName: bookingData.propertyName || 'Hotel Reservation'
+          propertyName: bookingData.propertyName || 'Hotel Reservation',
+          discount: Number(bookingData.discount || 0)
         };
 
         let parsedExpenses = [];
@@ -103,7 +104,7 @@ export default function BookingInvoice() {
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const totalPaid = payments.filter(pay => pay.status !== 'refunded').reduce((sum, pay) => sum + pay.amount, 0);
   const totalRefunded = payments.filter(pay => pay.status === 'refunded').reduce((sum, pay) => sum + pay.amount, 0);
-  const grandTotal = roomTotal + totalExpenses;
+  const grandTotal = roomTotal + totalExpenses - Number(booking?.discount || 0);
   const balanceDue = grandTotal - totalPaid;
 
   const currentPaymentStatus = useMemo(() => {
@@ -140,7 +141,7 @@ export default function BookingInvoice() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-8 bg-white min-h-screen text-slate-800 font-sans antialiased text-xs">
+    <div className="max-w-3xl mx-auto p-4 sm:p-8 bg-white min-h-screen text-slate-800 font-sans antialiased text-xs">
       <style>{`
         @media print {
           .no-print {
@@ -159,21 +160,21 @@ export default function BookingInvoice() {
       `}</style>
 
       {/* Print Controls Header */}
-      <div className="no-print flex justify-between items-center border-b border-slate-200 pb-4 mb-8">
+      <div className="no-print flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center border-b border-slate-200 pb-4 mb-8">
         <div>
           <h1 className="text-sm font-bold text-slate-800">Print Preview</h1>
           <p className="text-[10px] text-slate-400">Close this tab when you are finished printing.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 w-full sm:w-auto">
           <button
             onClick={() => window.print()}
-            className="border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase px-4 py-1.5 rounded transition-all"
+            className="flex-1 sm:flex-initial border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs uppercase px-4 py-1.5 rounded transition-all"
           >
             Print Invoice
           </button>
           <button
             onClick={() => window.close()}
-            className="border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs uppercase px-4 py-1.5 rounded transition-all"
+            className="flex-1 sm:flex-initial border border-slate-300 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs uppercase px-4 py-1.5 rounded transition-all"
           >
             Close Tab
           </button>
@@ -184,13 +185,13 @@ export default function BookingInvoice() {
       <div className="space-y-6">
         
         {/* Invoice Header */}
-        <div className="flex justify-between items-start border-b border-slate-300 pb-6">
+        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start border-b border-slate-300 pb-6">
           <div>
             <h2 className="text-lg font-black text-slate-900 tracking-tight uppercase">{booking.propertyName}</h2>
             <p className="text-[10px] text-slate-500 mt-0.5">{booking.address || 'Address not specified'}, {booking.country || ''}</p>
             {booking.guestPhone && <p className="text-[10px] text-slate-400 mt-0.5">Contact: {booking.guestPhone}</p>}
           </div>
-          <div className="text-right">
+          <div className="text-left sm:text-right">
             <h1 className="text-xl font-black text-slate-900 tracking-tight uppercase">INVOICE</h1>
             <p className="text-sm font-bold text-slate-700 mt-1">Booking #00{booking.id}</p>
             {booking.status === 'cancelled' ? (
@@ -210,7 +211,7 @@ export default function BookingInvoice() {
         </div>
 
         {/* Guest Profile & Reservation details */}
-        <div className="grid grid-cols-2 gap-8 border-b border-slate-200 pb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 sm:gap-8 border-b border-slate-200 pb-6">
           <div>
             <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Guest Profile</h3>
             <div className="space-y-1.5">
@@ -234,93 +235,97 @@ export default function BookingInvoice() {
         </div>
 
         {/* Cost Breakdown */}
-        <div>
+        <div className="min-w-0">
           <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Cost Breakdown</h3>
-          <table className="w-full border-collapse border border-slate-200 text-left">
-            <thead>
-              <tr className="bg-slate-50 border-b border-slate-200">
-                <th className="p-2.5 font-bold text-slate-600 uppercase">Item Description</th>
-                <th className="p-2.5 font-bold text-slate-600 text-right uppercase">Rate</th>
-                <th className="p-2.5 font-bold text-slate-600 text-center uppercase">Qty/Nights</th>
-                <th className="p-2.5 font-bold text-slate-600 text-right uppercase">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-slate-200">
-                <td className="p-2.5">Room Stay Charge (Room {booking.roomNumber} - {booking.roomType})</td>
-                <td className="p-2.5 text-right">Rs. {roomPrice.toFixed(2)}</td>
-                <td className="p-2.5 text-center">{nights}</td>
-                <td className="p-2.5 text-right font-semibold">Rs. {roomTotal.toFixed(2)}</td>
-              </tr>
-              {expenses.map((exp) => (
-                <tr key={exp.id} className="border-b border-slate-200">
-                  <td className="p-2.5">{exp.description} ({exp.date})</td>
-                  <td className="p-2.5 text-right">Rs. {exp.amount.toFixed(2)}</td>
-                  <td className="p-2.5 text-center">1</td>
-                  <td className="p-2.5 text-right font-semibold">Rs. {exp.amount.toFixed(2)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Ledger & Transactions */}
-        {payments.length > 0 && (
-          <div>
-            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Payment Transaction Log</h3>
-            <table className="w-full border-collapse border border-slate-200 text-left">
+          <div className="overflow-x-auto border border-slate-200 rounded">
+            <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
-                  <th className="p-2.5 font-bold text-slate-600 uppercase">Payment Method</th>
-                  <th className="p-2.5 font-bold text-slate-600 uppercase">Date</th>
-                  <th className="p-2.5 font-bold text-slate-600 uppercase">Status</th>
-                  <th className="p-2.5 font-bold text-slate-600 text-right uppercase">Amount Received</th>
+                  <th className="p-2.5 font-bold text-slate-600 uppercase">Item Description</th>
+                  <th className="p-2.5 font-bold text-slate-600 text-right uppercase">Rate</th>
+                  <th className="p-2.5 font-bold text-slate-600 text-center uppercase">Qty/Nights</th>
+                  <th className="p-2.5 font-bold text-slate-600 text-right uppercase">Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {payments.map((pay) => (
-                  <tr key={pay.id} className="border-b border-slate-200 last:border-0">
-                    <td className="p-2.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-800 uppercase">{pay.method}</span>
-                        <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider border ${
-                          pay.note === 'Advance Payment' 
-                            ? 'bg-blue-50 text-blue-800 border-blue-200' 
-                            : pay.note === 'Full Payment'
-                            ? 'bg-slate-50 text-slate-700 border-slate-350'
-                            : 'bg-slate-50 text-slate-400 border-slate-200 italic'
-                        }`}>
-                          {pay.note || 'General Payment'}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="p-2.5 text-slate-500">{pay.date}</td>
-                    <td className="p-2.5">
-                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
-                        pay.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
-                        pay.status === 'refunded' ? 'bg-red-50 text-red-700 border-red-200' :
-                        'bg-amber-50 text-amber-700 border-amber-100'
-                      }`}>
-                        {pay.status}
-                      </span>
-                    </td>
-                    <td className="p-2.5 text-right font-bold">
-                      {pay.status === 'refunded' ? (
-                        <span className="text-red-600 line-through">Rs. {pay.amount.toFixed(2)}</span>
-                      ) : (
-                        <span className="text-emerald-700">+Rs. {pay.amount.toFixed(2)}</span>
-                      )}
-                    </td>
+                <tr className="border-b border-slate-200">
+                  <td className="p-2.5">Room Stay Charge (Room {booking.roomNumber} - {booking.roomType})</td>
+                  <td className="p-2.5 text-right">Rs. {roomPrice.toFixed(2)}</td>
+                  <td className="p-2.5 text-center">{nights}</td>
+                  <td className="p-2.5 text-right font-semibold">Rs. {roomTotal.toFixed(2)}</td>
+                </tr>
+                {expenses.map((exp) => (
+                  <tr key={exp.id} className="border-b border-slate-200">
+                    <td className="p-2.5">{exp.description} ({exp.date})</td>
+                    <td className="p-2.5 text-right">Rs. {exp.amount.toFixed(2)}</td>
+                    <td className="p-2.5 text-center">1</td>
+                    <td className="p-2.5 text-right font-semibold">Rs. {exp.amount.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Ledger & Transactions */}
+        {payments.length > 0 && (
+          <div className="min-w-0">
+            <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">Payment Transaction Log</h3>
+            <div className="overflow-x-auto border border-slate-200 rounded">
+              <table className="w-full border-collapse text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="p-2.5 font-bold text-slate-600 uppercase">Payment Method</th>
+                    <th className="p-2.5 font-bold text-slate-600 uppercase">Date</th>
+                    <th className="p-2.5 font-bold text-slate-600 uppercase">Status</th>
+                    <th className="p-2.5 font-bold text-slate-600 text-right uppercase">Amount Received</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payments.map((pay) => (
+                    <tr key={pay.id} className="border-b border-slate-200 last:border-0">
+                      <td className="p-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-800 uppercase">{pay.method}</span>
+                          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider border ${
+                            pay.note === 'Advance Payment' 
+                              ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                              : pay.note === 'Full Payment'
+                              ? 'bg-slate-50 text-slate-700 border-slate-350'
+                              : 'bg-slate-50 text-slate-400 border-slate-200 italic'
+                          }`}>
+                            {pay.note || 'General Payment'}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-2.5 text-slate-500">{pay.date}</td>
+                      <td className="p-2.5">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase border ${
+                          pay.status === 'paid' ? 'bg-emerald-50 text-emerald-700 border-emerald-100' :
+                          pay.status === 'refunded' ? 'bg-red-50 text-red-700 border-red-200' :
+                          'bg-amber-50 text-amber-700 border-amber-100'
+                        }`}>
+                          {pay.status}
+                        </span>
+                      </td>
+                      <td className="p-2.5 text-right font-bold">
+                        {pay.status === 'refunded' ? (
+                          <span className="text-red-600 line-through">Rs. {pay.amount.toFixed(2)}</span>
+                        ) : (
+                          <span className="text-emerald-700">+Rs. {pay.amount.toFixed(2)}</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
 
         {/* Grand Summary */}
         <div className="flex justify-end pt-4">
-          <div className="w-64 space-y-2 text-[11px] font-medium text-slate-700">
+          <div className="w-full sm:w-64 space-y-2 text-[11px] font-medium text-slate-700">
             <div className="flex justify-between py-0.5">
               <span className="text-slate-500">Subtotal Stay</span>
               <span className="font-semibold text-slate-700">Rs. {roomTotal.toFixed(2)}</span>
@@ -329,6 +334,13 @@ export default function BookingInvoice() {
               <span className="text-slate-500">Expenses Subtotal</span>
               <span className="font-semibold text-slate-700">Rs. {totalExpenses.toFixed(2)}</span>
             </div>
+
+            {booking && Number(booking.discount || 0) > 0 && (
+              <div className="flex justify-between py-0.5 text-rose-600 font-bold">
+                <span>Discount</span>
+                <span>- Rs. {Number(booking.discount).toFixed(2)}</span>
+              </div>
+            )}
             
             {/* Single line above Grand Total */}
             <div className="border-t border-slate-300 my-1.5"></div>

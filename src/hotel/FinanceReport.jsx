@@ -136,6 +136,10 @@ export default function FinanceReport() {
       .reduce((acc, pay) => acc + Number(pay.amount || 0), 0)
   ), [filteredPayments]);
 
+  const totalDiscounts = useMemo(() => (
+    filteredBookings.reduce((acc, b) => acc + Number(b.discount || 0), 0)
+  ), [filteredBookings]);
+
   const occupancyRate = useMemo(() => {
     if (!rooms.length) return 0;
     const today = new Date();
@@ -347,11 +351,12 @@ export default function FinanceReport() {
       )}
 
       {/* Main Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         {[
           { label: 'Gross Revenue', value: totalRevenue, trend: '--', color: 'text-blue-600' },
           { label: 'Pending Payments', value: pendingPayments, trend: '--', color: 'text-amber-600' },
           { label: 'Refunded Payments', value: totalRefunded, trend: '--', color: 'text-red-600' },
+          { label: 'Total Discounts', value: totalDiscounts, trend: '--', color: 'text-rose-600' },
           { label: 'Current Occupancy', value: `${occupancyRate}%`, trend: '--', color: 'text-emerald-600' },
           { label: 'Net Profit', value: netProfit, trend: '--', color: 'text-indigo-600' }
         ].map((stat, i) => (
