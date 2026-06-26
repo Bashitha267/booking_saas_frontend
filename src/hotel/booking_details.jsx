@@ -30,6 +30,11 @@ export default function BookingDetails() {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showRefundModal, setShowRefundModal] = useState(false);
 
+  // Discount editor states
+  const [discountInput, setDiscountInput] = useState('');
+  const [discountError, setDiscountError] = useState('');
+  const [isSavingDiscount, setIsSavingDiscount] = useState(false);
+
   const roomPrice = booking ? Number(booking.roomPrice || 0) : 0;
   const nights = useMemo(() => {
     if (!booking?.startDate || !booking?.endDate) return 1;
@@ -41,8 +46,52 @@ export default function BookingDetails() {
   const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
   const totalPaid = payments.filter(pay => pay.status !== 'refunded').reduce((sum, pay) => sum + pay.amount, 0);
   const totalRefunded = payments.filter(pay => pay.status === 'refunded').reduce((sum, pay) => sum + pay.amount, 0);
-  const grandTotal = roomTotal + totalExpenses - Number(booking?.discount || 0);
+  const subTotal = roomTotal + totalExpenses;
+  const appliedDiscount = Number(booking?.discount || 0);
+  const grandTotal = subTotal - appliedDiscount;
   const balanceDue = grandTotal - totalPaid;
+
+  const handleApplyDiscount = async () => {
+    const val = parseFloat(discountInput);
+    if (isNaN(val) || val < 0) {
+      setDiscountError('Please enter a valid discount amount.');
+      return;
+    }
+    if (val >= subTotal) {
+      setDiscountError(`Discount must be less than the total (Rs. ${subTotal.toFixed(2)}).`);
+      return;
+    }
+    setDiscountError('');
+    setIsSavingDiscount(true);
+    try {
+      await api.put(`/bookings/${booking.id}`, { discount: val });
+      setBooking((prev) => ({ ...prev, discount: val }));
+      setDiscountInput('');
+      showToast('Discount applied successfully', 'success');
+    } catch (err) {
+      console.error('Failed to save discount:', err);
+      setDiscountError('Failed to save discount.');
+      showToast('Failed to save discount.', 'error');
+    } finally {
+      setIsSavingDiscount(false);
+    }
+  };
+
+  const handleRemoveDiscount = async () => {
+    setDiscountError('');
+    setIsSavingDiscount(true);
+    try {
+      await api.put(`/bookings/${booking.id}`, { discount: 0 });
+      setBooking((prev) => ({ ...prev, discount: 0 }));
+      setDiscountInput('');
+      showToast('Discount removed', 'success');
+    } catch (err) {
+      console.error('Failed to remove discount:', err);
+      showToast('Failed to remove discount.', 'error');
+    } finally {
+      setIsSavingDiscount(false);
+    }
+  };
 
   const currentPaymentStatus = useMemo(() => {
     if (totalPaid === 0 && grandTotal === 0) return 'not paid';
@@ -174,6 +223,7 @@ export default function BookingDetails() {
           setPayments(bookingPayments);
         }
       } catch (error) {
+        console.error('Failed to load booking details:', error);
         if (isMounted) {
           setLoadError('Failed to load booking details.');
           showToast('Failed to load booking details.', 'error');
@@ -202,6 +252,7 @@ export default function BookingDetails() {
       setExpenseError('');
       showToast('Expenses updated', 'success');
     } catch (err) {
+      console.error('Failed to update expenses in the database:', err);
       setExpenseError('Failed to update expenses in the database.');
       showToast('Failed to update expenses in the database.', 'error');
     }
@@ -321,6 +372,7 @@ export default function BookingDetails() {
       setShowPaymentModal(false);
       showToast('Payment added successfully', 'success');
     } catch (err) {
+      console.error('Failed to add payment:', err);
       setPaymentError(err.response?.data?.message || 'Failed to add payment.');
       showToast(err.response?.data?.message || 'Failed to add payment.', 'error');
     }
@@ -350,6 +402,7 @@ export default function BookingDetails() {
       await refreshPayments(booking.id);
       showToast('Payment removed', 'success');
     } catch (error) {
+      console.error('Failed to remove payment:', error);
       setIsRemovingPayment(false);
       setPaymentError(error.response?.data?.message || 'Failed to remove payment');
       showToast(error.response?.data?.message || 'Failed to remove payment', 'error');
@@ -364,6 +417,7 @@ export default function BookingDetails() {
       await refreshPayments(booking.id);
       showToast(`Payment marked as ${nextStatus}`, 'success');
     } catch (err) {
+      console.error('Failed to update payment status:', err);
       showToast(err.response?.data?.message || 'Failed to update payment status', 'error');
     }
   };
@@ -449,6 +503,7 @@ export default function BookingDetails() {
       setDetailsMessage({ type: 'success', message: 'Booking updated successfully.' });
       setIsEditingDetails(false);
     } catch (error) {
+      console.error('Failed to update booking:', error);
       setDetailsMessage({ type: 'error', message: 'Failed to update booking.' });
     }
   };
@@ -460,6 +515,7 @@ export default function BookingDetails() {
     try {
       await api.put(`/bookings/${booking.id}`, { status: nextStatus });
     } catch (error) {
+      console.error('Failed to update booking status:', error);
       setBooking((prev) => ({ ...prev, status: previousStatus }));
     }
   };
@@ -945,20 +1001,20 @@ export default function BookingDetails() {
 
                 {/* Extra Charges Row */}
                 <div className="flex justify-between items-start gap-4 py-1">
-                  <span>Extra Charges & Expenses ({expenses.length} configured)</span>
+                  <span>Extra Charges &amp; Expenses ({expenses.length} configured)</span>
                   <span className="font-semibold text-slate-900 shrink-0">Rs. {totalExpenses.toFixed(2)}</span>
                 </div>
 
-                {/* Discount Row */}
-                {booking && Number(booking.discount || 0) > 0 && (
-                  <div className="flex justify-between items-start gap-4 py-1 text-rose-600">
-                    <span>Discount Applied</span>
-                    <span className="font-semibold shrink-0">- Rs. {Number(booking.discount).toFixed(2)}</span>
+                {/* Single line above Grand Total */}
+                <div className="border-t border-slate-300 my-2"></div>
+
+                {/* Discount row (shown in brackets before grand total) */}
+                {appliedDiscount > 0 && (
+                  <div className="flex justify-between items-center gap-4 py-0.5 text-rose-600">
+                    <span className="font-semibold">(Discount Applied)</span>
+                    <span className="font-bold shrink-0">(- Rs. {appliedDiscount.toFixed(2)})</span>
                   </div>
                 )}
-
-                {/* Single line above Grand Total */}
-                <div className="border-t border-slate-350 my-2"></div>
 
                 {/* Grand Total Row */}
                 <div className="flex justify-between items-center gap-4 py-1 font-bold text-slate-900">
@@ -981,7 +1037,7 @@ export default function BookingDetails() {
                 )}
 
                 {/* Single line above Balance Due */}
-                <div className="border-t border-slate-350 my-2"></div>
+                <div className="border-t border-slate-300 my-2"></div>
 
                 {/* Balance Due Row */}
                 <div className={`flex justify-between items-center gap-4 py-1.5 font-bold ${balanceDue > 0 ? 'text-red-900' : 'text-emerald-800'}`}>
@@ -991,6 +1047,80 @@ export default function BookingDetails() {
                   </span>
                 </div>
               </div>
+            </div>
+
+            {/* Discount Editor Panel */}
+            <div className="space-y-3 no-print">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900 border-b border-slate-200 pb-1 flex items-center justify-between">
+                <span>Apply Discount</span>
+                {appliedDiscount > 0 && (
+                  <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded">
+                    Active: Rs. {appliedDiscount.toFixed(2)} off
+                  </span>
+                )}
+              </h3>
+
+              {/* Quick % Buttons */}
+              <div className="flex flex-wrap gap-2">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider self-center mr-1">Quick:</span>
+                {[5, 10].map((pct) => (
+                  <button
+                    key={pct}
+                    type="button"
+                    disabled={isSavingDiscount || booking.status === 'cancelled'}
+                    onClick={() => {
+                      const val = (subTotal * pct) / 100;
+                      setDiscountInput(val.toFixed(2));
+                      setDiscountError('');
+                    }}
+                    className="border border-blue-300 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs px-3 py-1.5 rounded transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {pct}% off (Rs. {((subTotal * pct) / 100).toFixed(2)})
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Amount Input Row */}
+              <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                <div className="relative flex-1 w-full">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-bold">Rs.</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder={`Custom amount (max Rs. ${(subTotal - 0.01).toFixed(2)})`}
+                    className={`w-full border rounded pl-9 pr-3 py-1.5 text-xs font-bold outline-none ${
+                      discountError ? 'border-red-300 bg-red-50 text-red-900' : 'border-slate-300 focus:border-blue-600'
+                    }`}
+                    value={discountInput}
+                    onChange={(e) => { setDiscountInput(e.target.value); setDiscountError(''); }}
+                    disabled={isSavingDiscount || booking.status === 'cancelled'}
+                  />
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleApplyDiscount}
+                    disabled={!discountInput || isSavingDiscount || booking.status === 'cancelled'}
+                    className="border border-emerald-600 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-1.5 rounded transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    {isSavingDiscount ? 'Saving…' : 'Apply Discount'}
+                  </button>
+                  {appliedDiscount > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveDiscount}
+                      disabled={isSavingDiscount || booking.status === 'cancelled'}
+                      className="border border-slate-300 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs px-3 py-1.5 rounded transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              </div>
+              {discountError && (
+                <p className="text-xs text-red-600 font-bold">{discountError}</p>
+              )}
             </div>
 
             {/* 2. Transaction Log / Payments History */}

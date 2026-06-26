@@ -26,6 +26,24 @@ export default function AdminUsers() {
   const [selectedStaff, setSelectedStaff] = useState(null)
   const [staffEditForm, setStaffEditForm] = useState({ username: '', password: '', status: '' })
   const [globalFee, setGlobalFee] = useState(0)
+  const [monthFilter, setMonthFilter] = useState(() => String(new Date().getMonth() + 1).padStart(2, '0'))
+  const [yearFilter, setYearFilter] = useState(() => String(new Date().getFullYear()))
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState('')
+  const [customPopup, setCustomPopup] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'confirm',
+    onConfirm: null
+  })
+
+  const resetFilters = () => {
+    setSearch('')
+    setStatusFilter('')
+    setMonthFilter(String(new Date().getMonth() + 1).padStart(2, '0'))
+    setYearFilter(String(new Date().getFullYear()))
+    setPaymentStatusFilter('')
+  }
 
   useEffect(() => {
     api.get('/admin/settings').then(res => {
@@ -37,25 +55,33 @@ export default function AdminUsers() {
   useEffect(() => {
     let active = true
     setLoading(true)
-    api.get('/admin/owners', { params: { q: search || undefined, status: statusFilter || undefined } })
+    api.get('/admin/owners', {
+      params: {
+        q: search || undefined,
+        status: statusFilter || undefined,
+        month: monthFilter || undefined,
+        year: yearFilter || undefined,
+        paymentStatus: paymentStatusFilter || undefined
+      }
+    })
       .then((res) => { if (!active) return; setOwners(res.data.data || []); setError('') })
       .catch((err) => { if (!active) return; setError(err.response?.data?.message || 'Failed to load owners') })
       .finally(() => { if (!active) return; setLoading(false) })
     return () => { active = false }
-  }, [search, statusFilter, refreshKey])
+  }, [search, statusFilter, monthFilter, yearFilter, paymentStatusFilter, refreshKey])
 
   const selectedOwnerSummary = useMemo(() =>
     owners.find((owner) => owner.id === selectedOwner) || null,
     [owners, selectedOwner]
   )
 
-  const openOwner = async (ownerId) => {
+  const openOwner = async (ownerId, defaultTab = 'Overview') => {
     setSelectedOwner(ownerId)
     setDetails(null)
     setDetailsLoading(true)
     setShowAddProperty(false)
     setSelectedStaff(null)
-    setActiveTab('Overview')
+    setActiveTab(defaultTab)
     try {
       const now = new Date()
       const year = now.getFullYear()
@@ -93,13 +119,25 @@ export default function AdminUsers() {
     setSelectedStaff(null)
   }
 
-  const updateOwner = async (e) => {
-    e.preventDefault()
+  const updateOwner = (e) => {
+    if (e && e.preventDefault) e.preventDefault()
     if (!selectedOwner) return
     const nextStatus = editForm.status || undefined
     if (nextStatus === 'blocked' && selectedOwnerSummary?.status !== 'blocked') {
-      if (!window.confirm('Block this owner? They will lose access to their dashboard.')) return
+      setCustomPopup({
+        isOpen: true,
+        title: 'Block Owner',
+        message: 'Block this owner? They will lose access to their dashboard.',
+        type: 'confirm',
+        onConfirm: () => executeUpdateOwner()
+      })
+    } else {
+      executeUpdateOwner()
     }
+  }
+
+  const executeUpdateOwner = async () => {
+    const nextStatus = editForm.status || undefined
     setSaving(true)
     try {
       await api.patch(`/admin/users/${selectedOwner}`, {
@@ -111,7 +149,7 @@ export default function AdminUsers() {
         yearlyPrice: editForm.yearlyPrice !== '' ? editForm.yearlyPrice : undefined,
         yearlyDiscount: editForm.yearlyDiscount !== '' ? editForm.yearlyDiscount : undefined,
       })
-      await openOwner(selectedOwner)
+      await openOwner(selectedOwner, activeTab)
       setRefreshKey((prev) => prev + 1)
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to update user')
@@ -125,12 +163,23 @@ export default function AdminUsers() {
     setStaffEditForm({ username: staff.username, password: '', status: staff.status || 'active' })
   }
 
-  const updateStaff = async (e) => {
-    e.preventDefault()
+  const updateStaff = (e) => {
+    if (e && e.preventDefault) e.preventDefault()
     if (!selectedStaff) return
     if (staffEditForm.status === 'blocked') {
-      if (!window.confirm('Block this staff member?')) return
+      setCustomPopup({
+        isOpen: true,
+        title: 'Block Staff Member',
+        message: 'Block this staff member?',
+        type: 'confirm',
+        onConfirm: () => executeUpdateStaff()
+      })
+    } else {
+      executeUpdateStaff()
     }
+  }
+
+  const executeUpdateStaff = async () => {
     setSaving(true)
     try {
       await api.patch(`/admin/users/${selectedStaff}`, {
@@ -164,15 +213,22 @@ export default function AdminUsers() {
     }
   }
 
-  const togglePropertyStatus = async (propertyId, nextStatus) => {
-    if (!window.confirm(`${nextStatus === 'blocked' ? 'Block' : 'Unblock'} this property?`)) return
-    try {
-      await api.patch(`/admin/properties/${propertyId}/status`, { status: nextStatus })
-      if (selectedOwner) await openOwner(selectedOwner)
-      setRefreshKey((prev) => prev + 1)
-    } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update property status')
-    }
+  const togglePropertyStatus = (propertyId, nextStatus) => {
+    setCustomPopup({
+      isOpen: true,
+      title: `${nextStatus === 'blocked' ? 'Block' : 'Unblock'} Property`,
+      message: `Are you sure you want to ${nextStatus === 'blocked' ? 'block' : 'unblock'} this property?`,
+      type: 'confirm',
+      onConfirm: async () => {
+        try {
+          await api.patch(`/admin/properties/${propertyId}/status`, { status: nextStatus })
+          if (selectedOwner) await openOwner(selectedOwner)
+          setRefreshKey((prev) => prev + 1)
+        } catch (err) {
+          setError(err.response?.data?.message || 'Failed to update property status')
+        }
+      }
+    })
   }
 
   const ownerPrice = details?.owner?.packagePrice != null ? Number(details.owner.packagePrice) : globalFee
@@ -206,13 +262,47 @@ export default function AdminUsers() {
                   <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Name, Property or Contact..." className="admin-filter-input w-full pl-11" />
                 </div>
               </div>
-              <div className="admin-filter-group w-56">
+              <div className="admin-filter-group w-48">
                 <label className="admin-filter-label">Account Status</label>
                 <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="admin-filter-input">
                   <option value="">All Statuses</option>
                   <option value="active">Active</option>
                   <option value="blocked">Blocked</option>
                 </select>
+              </div>
+              <div className="admin-filter-group w-36">
+                <label className="admin-filter-label">Month</label>
+                <select value={monthFilter} onChange={(e) => setMonthFilter(e.target.value)} className="admin-filter-input">
+                  <option value="">All Months</option>
+                  {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map((m, i) => (
+                    <option key={m} value={String(i + 1).padStart(2, '0')}>{m}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="admin-filter-group w-28">
+                <label className="admin-filter-label">Year</label>
+                <input
+                  type="number"
+                  placeholder="YYYY"
+                  value={yearFilter}
+                  onChange={(e) => setYearFilter(e.target.value)}
+                  className="admin-filter-input text-center"
+                />
+              </div>
+              <div className="admin-filter-group w-44">
+                <label className="admin-filter-label">Payment Status</label>
+                <select value={paymentStatusFilter} onChange={(e) => setPaymentStatusFilter(e.target.value)} className="admin-filter-input">
+                  <option value="">All Payments</option>
+                  <option value="paid">Paid</option>
+                  <option value="unpaid">Unpaid</option>
+                </select>
+              </div>
+              <div className="flex gap-2 pb-0.5">
+                <button className="admin-filter-btn-reset" onClick={resetFilters} title="Reset Filters">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
@@ -280,13 +370,52 @@ export default function AdminUsers() {
                       )}
                     </td>
                     <td className="py-3 text-right">
-                      <button
-                        onClick={() => openOwner(owner.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all text-xs font-black uppercase tracking-wider"
-                      >
-                        View Profile
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => openOwner(owner.id, 'Overview')}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white transition-all text-xs font-black uppercase tracking-wider"
+                        >
+                          Profile
+                        </button>
+                        
+                        <button
+                          onClick={() => openOwner(owner.id, 'Settings')}
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-slate-100 text-slate-700 hover:bg-slate-200 transition-all text-xs font-black uppercase tracking-wider"
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            const nextStatus = owner.status === 'blocked' ? 'active' : 'blocked';
+                            setCustomPopup({
+                              isOpen: true,
+                              title: `${nextStatus === 'blocked' ? 'Block' : 'Unblock'} Owner`,
+                              message: `${nextStatus === 'blocked' ? 'Block' : 'Unblock'} this owner? They will ${nextStatus === 'blocked' ? 'lose' : 'regain'} access to their dashboard.`,
+                              type: 'confirm',
+                              onConfirm: async () => {
+                                try {
+                                  setSaving(true);
+                                  await api.patch(`/admin/users/${owner.id}`, { status: nextStatus });
+                                  setRefreshKey(prev => prev + 1);
+                                } catch (err) {
+                                  setError(err.response?.data?.message || 'Failed to update user status');
+                                } finally {
+                                  setSaving(false);
+                                }
+                              }
+                            });
+                          }}
+                          disabled={saving}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl transition-all text-xs font-black uppercase tracking-wider ${
+                            owner.status === 'blocked'
+                              ? 'bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white'
+                              : 'bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white'
+                          }`}
+                        >
+                          {owner.status === 'blocked' ? 'Unblock' : 'Block'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -770,6 +899,37 @@ export default function AdminUsers() {
                   No details available
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {customPopup.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2rem] w-full max-w-md p-6 md:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-2">{customPopup.title}</h3>
+            <p className="text-xs md:text-sm font-bold text-slate-500 mb-6">{customPopup.message}</p>
+            
+            <div className="flex items-center justify-end gap-3">
+              {customPopup.type === 'confirm' && (
+                <button
+                  onClick={() => setCustomPopup(prev => ({ ...prev, isOpen: false }))}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider transition-all"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (customPopup.onConfirm) {
+                    customPopup.onConfirm();
+                  }
+                  setCustomPopup(prev => ({ ...prev, isOpen: false }));
+                }}
+                className="px-6 py-2.5 bg-slate-900 hover:bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+              >
+                {customPopup.type === 'confirm' ? 'Confirm' : 'OK'}
+              </button>
             </div>
           </div>
         </div>

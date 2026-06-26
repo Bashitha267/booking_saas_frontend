@@ -6,6 +6,7 @@ export default function PropertyManagement() {
   const [properties, setProperties] = useState([]);
   const [isAdding, setIsAdding] = useState(false);
   const [isPropertyModalOpen, setIsPropertyModalOpen] = useState(false);
+  const [selectedPropertyFilter, setSelectedPropertyFilter] = useState('all');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [submitStatus, setSubmitStatus] = useState({ type: '', message: '' });
@@ -54,6 +55,64 @@ export default function PropertyManagement() {
     hasAc: false,
   });
   const [editStatus, setEditStatus] = useState({ type: '', message: '' });
+  const [isManagePropertiesOpen, setIsManagePropertiesOpen] = useState(false);
+  const [selectedManagePropId, setSelectedManagePropId] = useState(null);
+  const [managePropForm, setManagePropForm] = useState({
+    name: '',
+    address: '',
+    city: '',
+    country: '',
+    phone: '',
+    email: '',
+  });
+  const [managePropStatus, setManagePropStatus] = useState({ type: '', message: '' });
+
+  useEffect(() => {
+    if (selectedManagePropId) {
+      const prop = properties.find(p => p.id === selectedManagePropId);
+      if (prop) {
+        setManagePropForm({
+          name: prop.name || '',
+          address: prop.address || '',
+          city: prop.city || '',
+          country: prop.country || '',
+          phone: prop.phone || '',
+          email: prop.email || '',
+        });
+      }
+    } else {
+      setManagePropForm({
+        name: '',
+        address: '',
+        city: '',
+        country: '',
+        phone: '',
+        email: '',
+      });
+    }
+  }, [selectedManagePropId, properties]);
+
+  const [isManageCategoriesOpen, setIsManageCategoriesOpen] = useState(false);
+  const [selectedManageCategoryName, setSelectedManageCategoryName] = useState('');
+  const [manageCategoryForm, setManageCategoryForm] = useState({
+    roomType: '',
+    capacityAdults: 1,
+    capacityChildren: 0,
+    price: '',
+    status: '',
+    propertyId: '',
+    hasAc: false,
+  });
+  const [manageCategoryStatus, setManageCategoryStatus] = useState({ type: '', message: '' });
+  const [customPopup, setCustomPopup] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'confirm', // 'confirm' or 'alert'
+    onConfirm: null,
+  });
+  const [activeCardMenu, setActiveCardMenu] = useState(null);
+
 
   useEffect(() => {
     let isMounted = true;
@@ -86,9 +145,16 @@ export default function PropertyManagement() {
     };
   }, []);
 
+  const filteredRooms = useMemo(() => {
+    if (!selectedPropertyFilter || selectedPropertyFilter === 'all') {
+      return rooms;
+    }
+    return rooms.filter((room) => String(room.propertyId) === String(selectedPropertyFilter));
+  }, [rooms, selectedPropertyFilter]);
+
   const roomTypes = useMemo(() => {
     const grouped = new Map();
-    rooms.forEach((room) => {
+    filteredRooms.forEach((room) => {
       const key = room.roomType || 'Unspecified';
       const current = grouped.get(key) || {
         id: key,
@@ -105,15 +171,80 @@ export default function PropertyManagement() {
       grouped.set(key, current);
     });
     return Array.from(grouped.values());
-  }, [rooms]);
+  }, [filteredRooms]);
 
   const totalRooms = roomTypes.reduce((acc, rt) => acc + rt.rooms.length, 0);
   const propertyCount = properties.length;
   const editPropertyOptions = useMemo(() => {
     if (!editTarget) return [];
     const ids = new Set(editTarget.rooms.map((room) => String(room.propertyId)));
-    return properties.filter((property) => ids.has(String(property.id)));
+    return properties.filter((property) => property.status !== 'blocked' && ids.has(String(property.id)));
   }, [editTarget, properties]);
+
+  const editCategoryRooms = useMemo(() => {
+    if (!editTarget) return [];
+    return editTarget.rooms.filter((room) => (
+      !editTypeForm.propertyId || String(room.propertyId) === String(editTypeForm.propertyId)
+    ));
+  }, [editTarget, editTypeForm.propertyId]);
+
+  const editCategoryStatusLabel = useMemo(() => {
+    if (!editCategoryRooms || editCategoryRooms.length === 0) return 'Keep current';
+    const statuses = [...new Set(editCategoryRooms.map(r => r.status))];
+    if (statuses.length === 1) {
+      const status = statuses[0];
+      const capitalized = status ? (status.charAt(0).toUpperCase() + status.slice(1)) : 'Available';
+      return `Keep current (${capitalized})`;
+    }
+    return 'Keep current (Mixed)';
+  }, [editCategoryRooms]);
+
+  const currentCategoryRooms = useMemo(() => {
+    if (!selectedManageCategoryName) return [];
+    const type = roomTypes.find(t => t.name === selectedManageCategoryName);
+    if (!type) return [];
+    return type.rooms.filter((room) => (
+      !manageCategoryForm.propertyId || String(room.propertyId) === String(manageCategoryForm.propertyId)
+    ));
+  }, [selectedManageCategoryName, roomTypes, manageCategoryForm.propertyId]);
+
+  const currentCategoryStatusLabel = useMemo(() => {
+    if (!currentCategoryRooms || currentCategoryRooms.length === 0) return 'Keep current';
+    const statuses = [...new Set(currentCategoryRooms.map(r => r.status))];
+    if (statuses.length === 1) {
+      const status = statuses[0];
+      const capitalized = status ? (status.charAt(0).toUpperCase() + status.slice(1)) : 'Available';
+      return `Keep current (${capitalized})`;
+    }
+    return 'Keep current (Mixed)';
+  }, [currentCategoryRooms]);
+
+  useEffect(() => {
+    if (selectedManageCategoryName) {
+      const type = roomTypes.find(t => t.name === selectedManageCategoryName);
+      if (type) {
+        setManageCategoryForm({
+          roomType: type.name,
+          capacityAdults: type.maxAdults || 1,
+          capacityChildren: type.maxChildren || 0,
+          price: type.basePrice || '',
+          status: '',
+          propertyId: '',
+          hasAc: type.rooms.some(r => r.hasAc === 1),
+        });
+      }
+    } else {
+      setManageCategoryForm({
+        roomType: '',
+        capacityAdults: 1,
+        capacityChildren: 0,
+        price: '',
+        status: '',
+        propertyId: '',
+        hasAc: false,
+      });
+    }
+  }, [selectedManageCategoryName, roomTypes]);
 
   const handleRoomFormChange = (field) => (event) => {
     const value = event.target.value;
@@ -290,6 +421,128 @@ export default function PropertyManagement() {
     setAssignRoomForm((prev) => ({ ...prev, [field]: value }));
   };
 
+  const handleManagePropFormChange = (field) => (event) => {
+    const value = event.target.value;
+    setManagePropForm(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleUpdateManageProperty = async () => {
+    setManagePropStatus({ type: '', message: '' });
+    if (!managePropForm.name.trim() || !managePropForm.address.trim()) {
+      setManagePropStatus({ type: 'error', message: 'Name and address are required.' });
+      return;
+    }
+    try {
+      setManagePropStatus({ type: 'loading', message: 'Saving changes...' });
+      const payload = {
+        name: managePropForm.name.trim(),
+        address: managePropForm.address.trim(),
+        city: managePropForm.city.trim(),
+        country: managePropForm.country.trim(),
+        phone: managePropForm.phone.trim(),
+        email: managePropForm.email.trim(),
+      };
+      await api.put(`/properties/${selectedManagePropId}`, payload);
+      
+      const propertiesRes = await api.get('/properties');
+      const nextProperties = propertiesRes.data?.data || [];
+      setProperties(nextProperties);
+      
+      const roomsRes = await api.get('/rooms');
+      setRooms(roomsRes.data?.data || []);
+
+      setManagePropStatus({ type: 'success', message: 'Property details updated successfully.' });
+    } catch (error) {
+      console.error('Failed to update property:', error);
+      setManagePropStatus({ type: 'error', message: 'Failed to update property.' });
+    }
+  };
+
+  const handleDeleteManageProperty = () => {
+    setCustomPopup({
+      isOpen: true,
+      title: 'Delete Property',
+      message: `Are you sure you want to delete "${managePropForm.name}"? This will delete all rooms associated with this property.`,
+      type: 'confirm',
+      onConfirm: async () => {
+        try {
+          setManagePropStatus({ type: 'loading', message: 'Deleting property...' });
+          await api.delete(`/properties/${selectedManagePropId}`);
+          
+          if (selectedPropertyFilter === String(selectedManagePropId)) {
+            setSelectedPropertyFilter('all');
+          }
+
+          const propertiesRes = await api.get('/properties');
+          const nextProperties = propertiesRes.data?.data || [];
+          setProperties(nextProperties);
+
+          const roomsRes = await api.get('/rooms');
+          setRooms(roomsRes.data?.data || []);
+
+          setManagePropStatus({ type: 'success', message: 'Property deleted successfully.' });
+          
+          if (nextProperties.length > 0) {
+            setSelectedManagePropId(nextProperties[0].id);
+          } else {
+            setSelectedManagePropId(null);
+            setIsManagePropertiesOpen(false);
+          }
+        } catch (error) {
+          console.error('Failed to delete property:', error);
+          setManagePropStatus({ type: 'error', message: error.response?.data?.message || 'Failed to delete property.' });
+        }
+      }
+    });
+  };
+
+  const handleUpdateManageCategory = async () => {
+    if (!selectedManageCategoryName) return;
+    setManageCategoryStatus({ type: '', message: '' });
+
+    const type = roomTypes.find(t => t.name === selectedManageCategoryName);
+    if (!type) return;
+
+    if (!manageCategoryForm.roomType.trim()) {
+      setManageCategoryStatus({ type: 'error', message: 'Room type name is required.' });
+      return;
+    }
+
+    const roomsToUpdate = type.rooms.filter((room) => (
+      !manageCategoryForm.propertyId || String(room.propertyId) === String(manageCategoryForm.propertyId)
+    ));
+
+    if (!roomsToUpdate.length) {
+      setManageCategoryStatus({ type: 'error', message: 'No rooms found for the selected property.' });
+      return;
+    }
+
+    try {
+      setManageCategoryStatus({ type: 'loading', message: 'Updating rooms...' });
+      const payload = {
+        roomType: manageCategoryForm.roomType.trim(),
+        capacityAdults: Number(manageCategoryForm.capacityAdults) || 1,
+        capacityChildren: Number(manageCategoryForm.capacityChildren) || 0,
+        price: Number(manageCategoryForm.price) || 0,
+        hasAc: manageCategoryForm.hasAc ? 1 : 0,
+      };
+      if (manageCategoryForm.status) {
+        payload.status = manageCategoryForm.status;
+      }
+
+      await Promise.all(
+        roomsToUpdate.map((room) => api.put(`/rooms/${room.id}`, payload))
+      );
+
+      await refreshRooms();
+      setManageCategoryStatus({ type: 'success', message: 'Category settings updated.' });
+      setSelectedManageCategoryName(manageCategoryForm.roomType.trim());
+    } catch (error) {
+      console.error('Failed to update category:', error);
+      setManageCategoryStatus({ type: 'error', message: 'Failed to update category.' });
+    }
+  };
+
   const handleEditTypeChange = (field) => (event) => {
     const value = event.target.value;
     setEditTypeForm((prev) => ({ ...prev, [field]: value }));
@@ -370,16 +623,51 @@ export default function PropertyManagement() {
     }
   };
 
-  const handleDeleteRoom = async (roomId) => {
-    if (!window.confirm('Are you sure you want to delete this room?')) {
-      return;
-    }
-    try {
-      await api.delete(`/rooms/${roomId}`);
-      await refreshRooms();
-    } catch (error) {
-      alert(error.response?.data?.message || 'Failed to delete room.');
-    }
+  const handleDeleteRoom = (roomId) => {
+    setCustomPopup({
+      isOpen: true,
+      title: 'Delete Room',
+      message: 'Are you sure you want to delete this room?',
+      type: 'confirm',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/rooms/${roomId}`);
+          await refreshRooms();
+        } catch (error) {
+          setCustomPopup({
+            isOpen: true,
+            title: 'Error',
+            message: error.response?.data?.message || 'Failed to delete room.',
+            type: 'alert',
+            onConfirm: null
+          });
+        }
+      }
+    });
+  };
+
+  const handleDeleteCategory = (type) => {
+    setActiveCardMenu(null);
+    setCustomPopup({
+      isOpen: true,
+      title: 'Delete Room Category',
+      message: `Are you sure you want to delete "${type.name}"? This will permanently delete all ${type.rooms.length} room(s) in this category.`,
+      type: 'confirm',
+      onConfirm: async () => {
+        try {
+          await Promise.all(type.rooms.map(r => api.delete(`/rooms/${r.id}`)));
+          await refreshRooms();
+        } catch (error) {
+          setCustomPopup({
+            isOpen: true,
+            title: 'Error',
+            message: error.response?.data?.message || 'Failed to delete category.',
+            type: 'alert',
+            onConfirm: null
+          });
+        }
+      }
+    });
   };
 
   return (
@@ -392,6 +680,17 @@ export default function PropertyManagement() {
             <p className="text-[10px] md:text-slate-500 font-medium">Manage your rooms and occupancy.</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={selectedPropertyFilter}
+              onChange={(e) => setSelectedPropertyFilter(e.target.value)}
+              className="bg-white text-slate-700 border border-slate-200 hover:border-blue-200 px-4 py-2.5 md:py-3 rounded-2xl font-bold text-xs md:text-sm transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+            >
+              <option value="all">All Properties</option>
+              {properties.filter((p) => p.status !== 'blocked').map((p) => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+
             <button
               onClick={openPropertyModal}
               className="bg-white text-slate-700 border border-slate-200 hover:border-blue-200 hover:text-blue-700 px-5 md:px-6 py-2.5 md:py-3 rounded-2xl font-black text-[10px] md:text-sm transition-all shadow-sm active:scale-95"
@@ -412,13 +711,41 @@ export default function PropertyManagement() {
 
         {/* Stats Overview */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-8 md:mb-10">
-          <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border border-slate-100">
-            <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Categories</p>
-            <p className="text-lg md:text-2xl font-black text-slate-800">{roomTypes.length}</p>
+          <div 
+            onClick={() => {
+              if (roomTypes.length > 0) {
+                setSelectedManageCategoryName(roomTypes[0].name);
+              }
+              setIsManageCategoriesOpen(true);
+            }}
+            className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border border-slate-100 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all flex flex-col justify-between group"
+          >
+            <div>
+              <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Categories</p>
+              <p className="text-lg md:text-2xl font-black text-slate-800">{roomTypes.length}</p>
+            </div>
+            <p className="text-[9px] font-black text-blue-500 group-hover:text-blue-700 uppercase tracking-wider mt-3 flex items-center gap-1 transition-colors">
+              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"/></svg>
+              Click to manage rooms
+            </p>
           </div>
-          <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border border-slate-100">
-            <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Properties</p>
-            <p className="text-lg md:text-2xl font-black text-slate-800">{propertyCount}</p>
+          <div 
+            onClick={() => {
+              if (properties.length > 0) {
+                setSelectedManagePropId(properties[0].id);
+              }
+              setIsManagePropertiesOpen(true);
+            }}
+            className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border border-slate-100 cursor-pointer hover:border-blue-300 hover:shadow-md transition-all flex flex-col justify-between group"
+          >
+            <div>
+              <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Properties</p>
+              <p className="text-lg md:text-2xl font-black text-slate-800">{propertyCount}</p>
+            </div>
+            <p className="text-[9px] font-black text-blue-500 group-hover:text-blue-700 uppercase tracking-wider mt-3 flex items-center gap-1 transition-colors">
+              <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M9 5l7 7-7 7"/></svg>
+              Click to manage properties
+            </p>
           </div>
           <div className="bg-white p-4 md:p-6 rounded-2xl md:rounded-3xl shadow-sm border border-slate-100">
             <p className="text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Inventory</p>
@@ -449,11 +776,38 @@ export default function PropertyManagement() {
                   <div className="bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full text-[8px] md:text-[10px] font-black uppercase tracking-widest">
                     {type.rooms.length} Units
                   </div>
-                  <button className="text-slate-300 hover:text-slate-600 transition-colors">
-                    <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
-                    </svg>
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setActiveCardMenu(activeCardMenu === type.id ? null : type.id); }}
+                      className="text-slate-300 hover:text-slate-600 transition-colors p-1 rounded-lg hover:bg-slate-100"
+                    >
+                      <svg className="w-4 h-4 md:w-5 md:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" />
+                      </svg>
+                    </button>
+                    {activeCardMenu === type.id && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setActiveCardMenu(null)} />
+                        <div className="absolute right-0 top-8 z-20 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden min-w-[150px] animate-in fade-in zoom-in-95 duration-150">
+                          <button
+                            onClick={() => { setActiveCardMenu(null); openEditModal(type); }}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black text-slate-700 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                            Edit Settings
+                          </button>
+                          <div className="border-t border-slate-100" />
+                          <button
+                            onClick={() => handleDeleteCategory(type)}
+                            className="w-full flex items-center gap-3 px-4 py-3 text-left text-[11px] font-black text-rose-600 hover:bg-rose-50 transition-colors"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            Delete Category
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <h3 className="text-lg md:text-2xl font-black text-slate-800 mb-1 md:mb-2">{type.name}</h3>
                 <p className="text-[10px] md:text-sm font-bold text-slate-400 mb-4 md:mb-6 flex items-center gap-2">
@@ -561,14 +915,14 @@ export default function PropertyManagement() {
       {/* Add Modal Placeholder */}
       {isAdding && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
-          <div className="bg-white rounded-[2.5rem] w-full max-w-xl p-8 shadow-2xl relative">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-xl max-h-[90vh] p-8 shadow-2xl relative flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
             <button onClick={handleCloseModal} className="absolute top-8 right-8 text-slate-300 hover:text-slate-600 transition-colors">
               <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
             <h2 className="text-xl md:text-2xl font-black text-slate-800 mb-2">New Room Type</h2>
             <p className="text-[11px] text-slate-400 font-bold mb-8">Configure your new room category settings.</p>
             
-            <div className="space-y-6">
+            <div className="space-y-6 overflow-y-auto flex-1 pr-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               <div>
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Property</label>
                 <select
@@ -577,7 +931,7 @@ export default function PropertyManagement() {
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 >
                   <option value="">Select property</option>
-                  {properties.map((property) => (
+                  {properties.filter((property) => property.status !== 'blocked').map((property) => (
                     <option key={property.id} value={property.id}>{property.name}</option>
                   ))}
                 </select>
@@ -614,17 +968,19 @@ export default function PropertyManagement() {
               </div>
               <div>
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Room Numbers</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {roomNumbers.map((value, index) => (
-                    <input
-                      key={`${index}`}
-                      type="text"
-                      placeholder={`Room ${index + 1}`}
-                      value={value}
-                      onChange={handleRoomNumberChange(index)}
-                      className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                    />
-                  ))}
+                <div className="max-h-[200px] overflow-y-auto pr-2 border border-slate-100 rounded-2xl p-3 bg-slate-50/50 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                  <div className="grid grid-cols-2 gap-3">
+                    {roomNumbers.map((value, index) => (
+                      <input
+                        key={`${index}`}
+                        type="text"
+                        placeholder={`Room ${index + 1}`}
+                        value={value}
+                        onChange={handleRoomNumberChange(index)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-4 py-2 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-6">
@@ -673,7 +1029,7 @@ export default function PropertyManagement() {
               </div>
               <button
                 onClick={handleCreateRooms}
-                className="w-full bg-slate-900 text-white py-4 rounded-[1.5rem] font-black tracking-tight text-sm shadow-xl shadow-slate-200 mt-4 hover:bg-blue-600 transition-all active:scale-95"
+                className="w-full bg-slate-900 text-white py-4 rounded-[1.5rem] font-black tracking-tight text-sm shadow-xl shadow-slate-200 mt-4 hover:bg-blue-600 transition-all active:scale-95 shrink-0"
               >
                 {submitStatus.type === 'loading' ? 'Creating Rooms...' : 'Create Room Category'}
               </button>
@@ -799,7 +1155,7 @@ export default function PropertyManagement() {
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                 >
                   <option value="">Select property</option>
-                  {properties.map((property) => (
+                  {properties.filter((property) => property.status !== 'blocked').map((property) => (
                     <option key={property.id} value={property.id}>{property.name}</option>
                   ))}
                 </select>
@@ -983,7 +1339,7 @@ export default function PropertyManagement() {
                     onChange={handleEditTypeChange('status')}
                     className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
                   >
-                    <option value="">Keep current</option>
+                    <option value="">{editCategoryStatusLabel}</option>
                     <option value="available">Available</option>
                     <option value="maintenance">Maintenance</option>
                     <option value="blocked">Blocked</option>
@@ -1013,6 +1369,356 @@ export default function PropertyManagement() {
                   {editStatus.message}
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isManagePropertiesOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 md:p-6">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-4xl p-6 md:p-8 shadow-2xl relative flex flex-col max-h-[90vh] md:max-h-[85vh]">
+            <button 
+              onClick={() => setIsManagePropertiesOpen(false)} 
+              className="absolute top-6 right-6 md:top-8 md:right-8 text-slate-300 hover:text-slate-600 transition-colors z-10"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            
+            <div className="mb-4 md:mb-6">
+              <h2 className="text-xl md:text-2xl font-black text-slate-800">Manage Properties</h2>
+              <p className="text-[11px] text-slate-400 font-bold">Edit details or remove registered properties.</p>
+            </div>
+
+            {properties.length === 0 ? (
+              <div className="text-center py-12 flex-1 flex flex-col items-center justify-center">
+                <p className="text-sm font-bold text-slate-400 mb-4">No properties registered.</p>
+                <button
+                  onClick={() => {
+                    setIsManagePropertiesOpen(false);
+                    openPropertyModal();
+                  }}
+                  className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider"
+                >
+                  + Add Property
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col md:flex-row gap-6 md:gap-8 flex-1 overflow-hidden min-h-0">
+                {/* Navbar/List Left Side */}
+                <div className="w-full md:w-1/3 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto pr-0 md:pr-4 border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 scrollbar-none shrink-0 min-h-0">
+                  {properties.map((p) => {
+                    const isSelected = p.id === selectedManagePropId;
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedManagePropId(p.id);
+                          setManagePropStatus({ type: '', message: '' });
+                        }}
+                        className={`text-left px-4 py-3 rounded-2xl text-xs md:text-sm font-black transition-all shrink-0 md:shrink border ${
+                          isSelected
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100'
+                            : 'bg-slate-50 border-slate-100 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="truncate font-black">{p.name}</div>
+                        <div className={`text-[9px] font-bold truncate mt-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                          {p.city || p.address}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Edit Form Right Side */}
+                <div className="flex-1 overflow-y-auto pr-1 space-y-5 min-h-0 custom-scrollbar animate-in fade-in duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="md:col-span-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Property Name</label>
+                      <input
+                        type="text"
+                        value={managePropForm.name}
+                        onChange={handleManagePropFormChange('name')}
+                        placeholder="e.g. Grand Plaza"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Address</label>
+                      <input
+                        type="text"
+                        value={managePropForm.address}
+                        onChange={handleManagePropFormChange('address')}
+                        placeholder="Street address"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">City</label>
+                      <input
+                        type="text"
+                        value={managePropForm.city}
+                        onChange={handleManagePropFormChange('city')}
+                        placeholder="City"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Country</label>
+                      <input
+                        type="text"
+                        value={managePropForm.country}
+                        onChange={handleManagePropFormChange('country')}
+                        placeholder="Country"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Phone</label>
+                      <input
+                        type="text"
+                        value={managePropForm.phone}
+                        onChange={handleManagePropFormChange('phone')}
+                        placeholder="Phone Number"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Email</label>
+                      <input
+                        type="email"
+                        value={managePropForm.email}
+                        onChange={handleManagePropFormChange('email')}
+                        placeholder="Email address"
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-4 border-t border-slate-100 flex flex-col md:flex-row gap-3">
+                    <button
+                      type="button"
+                      onClick={handleUpdateManageProperty}
+                      className="flex-1 bg-slate-900 text-white py-3 rounded-2xl font-black text-xs md:text-sm shadow-lg hover:bg-blue-600 transition-all active:scale-[0.98] uppercase tracking-[0.2em]"
+                    >
+                      {managePropStatus.type === 'loading' && managePropStatus.message === 'Saving changes...' ? 'Saving...' : 'Save Changes'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeleteManageProperty}
+                      className="bg-white text-rose-600 border border-rose-200 hover:bg-rose-50 px-6 py-3 rounded-2xl font-black text-xs md:text-sm transition-all active:scale-[0.98] uppercase tracking-[0.2em]"
+                    >
+                      Delete Property
+                    </button>
+                  </div>
+
+                  {managePropStatus.message && (
+                    <p className={`text-[10px] font-black uppercase tracking-widest mt-2 ${managePropStatus.type === 'error' ? 'text-rose-500' : 'text-emerald-600'}`}>
+                      {managePropStatus.message}
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {isManageCategoriesOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4 md:p-6">
+          <div className="bg-white rounded-[2.5rem] w-full max-w-4xl p-6 md:p-8 shadow-2xl relative flex flex-col max-h-[90vh] md:max-h-[85vh]">
+            <button 
+              onClick={() => setIsManageCategoriesOpen(false)} 
+              className="absolute top-6 right-6 md:top-8 md:right-8 text-slate-300 hover:text-slate-600 transition-colors z-10"
+            >
+              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+            
+            <div className="mb-4 md:mb-6">
+              <h2 className="text-xl md:text-2xl font-black text-slate-800">Manage Room Categories</h2>
+              <p className="text-[11px] text-slate-400 font-bold">Edit details or names of your categories.</p>
+            </div>
+
+            {roomTypes.length === 0 ? (
+              <div className="text-center py-12 flex-1 flex flex-col items-center justify-center">
+                <p className="text-sm font-bold text-slate-400 mb-4">No room categories registered.</p>
+                <button
+                  onClick={() => {
+                    setIsManageCategoriesOpen(false);
+                    setIsAdding(true);
+                  }}
+                  className="bg-blue-600 text-white px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider"
+                >
+                  + Add Category
+                </button>
+              </div>
+            ) : (
+              <div className="flex flex-col md:flex-row gap-6 md:gap-8 flex-1 overflow-hidden min-h-0">
+                <div className="w-full md:w-1/3 flex md:flex-col gap-2 overflow-x-auto md:overflow-y-auto pr-0 md:pr-4 border-b md:border-b-0 md:border-r border-slate-100 pb-4 md:pb-0 scrollbar-none shrink-0 min-h-0">
+                  {roomTypes.map((type) => {
+                    const isSelected = type.name === selectedManageCategoryName;
+                    return (
+                      <button
+                        key={type.id}
+                        onClick={() => {
+                          setSelectedManageCategoryName(type.name);
+                          setManageCategoryStatus({ type: '', message: '' });
+                        }}
+                        className={`text-left px-4 py-3 rounded-2xl text-xs md:text-sm font-black transition-all shrink-0 md:shrink border ${
+                          isSelected
+                            ? 'bg-blue-600 border-blue-600 text-white shadow-md shadow-blue-100'
+                            : 'bg-slate-50 border-slate-100 text-slate-600 hover:bg-slate-100'
+                        }`}
+                      >
+                        <div className="truncate font-black">{type.name}</div>
+                        <div className={`text-[9px] font-bold truncate mt-0.5 ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                          Rs. {type.basePrice.toLocaleString()} · {type.rooms.length} {type.rooms.length === 1 ? 'Unit' : 'Units'}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex-1 overflow-y-auto pr-1 space-y-5 min-h-0 custom-scrollbar animate-in fade-in duration-300">
+                  <div className="space-y-6">
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Apply changes to property (Optional)</label>
+                      <select
+                        value={manageCategoryForm.propertyId}
+                        onChange={(e) => setManageCategoryForm(prev => ({ ...prev, propertyId: e.target.value }))}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      >
+                        <option value="">All properties</option>
+                        {(() => {
+                          const currentType = roomTypes.find(t => t.name === selectedManageCategoryName);
+                          if (!currentType) return null;
+                          const propIds = new Set(currentType.rooms.map(r => String(r.propertyId)));
+                          return properties
+                            .filter(p => p.status !== 'blocked' && propIds.has(String(p.id)))
+                            .map(p => (
+                              <option key={p.id} value={p.id}>{p.name}</option>
+                            ));
+                        })()}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Room Type Name</label>
+                      <input
+                        type="text"
+                        value={manageCategoryForm.roomType}
+                        onChange={(e) => setManageCategoryForm(prev => ({ ...prev, roomType: e.target.value }))}
+                        className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Max Adults</label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={manageCategoryForm.capacityAdults}
+                          onChange={(e) => setManageCategoryForm(prev => ({ ...prev, capacityAdults: e.target.value }))}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Max Children</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={manageCategoryForm.capacityChildren}
+                          onChange={(e) => setManageCategoryForm(prev => ({ ...prev, capacityChildren: e.target.value }))}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Base Price (Rs.)</label>
+                        <input
+                          type="number"
+                          value={manageCategoryForm.price}
+                          onChange={(e) => setManageCategoryForm(prev => ({ ...prev, price: e.target.value }))}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5 block">Status</label>
+                        <select
+                          value={manageCategoryForm.status}
+                          onChange={(e) => setManageCategoryForm(prev => ({ ...prev, status: e.target.value }))}
+                          className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        >
+                          <option value="">{currentCategoryStatusLabel}</option>
+                          <option value="available">Available</option>
+                          <option value="maintenance">Maintenance</option>
+                          <option value="blocked">Blocked</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2.5 py-1">
+                      <input
+                        type="checkbox"
+                        id="manageCategoryHasAc"
+                        checked={manageCategoryForm.hasAc || false}
+                        onChange={(e) => setManageCategoryForm(prev => ({ ...prev, hasAc: e.target.checked }))}
+                        className="w-4 h-4 text-blue-650 border-slate-300 rounded focus:ring-blue-500 cursor-pointer"
+                      />
+                      <label htmlFor="manageCategoryHasAc" className="text-[10px] font-extrabold text-slate-700 uppercase tracking-widest cursor-pointer select-none">
+                        Air Conditioned (AC)
+                      </label>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleUpdateManageCategory}
+                      className="w-full bg-slate-900 text-white py-3.5 rounded-2xl font-black text-xs md:text-sm shadow-lg hover:bg-blue-600 transition-all active:scale-[0.98] uppercase tracking-[0.2em]"
+                    >
+                      {manageCategoryStatus.type === 'loading' ? 'Saving Settings...' : 'Save Settings'}
+                    </button>
+
+                    {manageCategoryStatus.message && (
+                      <p className={`text-[10px] font-black uppercase tracking-widest ${manageCategoryStatus.type === 'error' ? 'text-rose-500' : 'text-emerald-600'}`}>
+                        {manageCategoryStatus.message}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      {customPopup.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2rem] w-full max-w-md p-6 md:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-2">{customPopup.title}</h3>
+            <p className="text-xs md:text-sm font-bold text-slate-500 mb-6">{customPopup.message}</p>
+            
+            <div className="flex items-center justify-end gap-3">
+              {customPopup.type === 'confirm' && (
+                <button
+                  onClick={() => setCustomPopup(prev => ({ ...prev, isOpen: false }))}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider transition-all"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (customPopup.onConfirm) {
+                    customPopup.onConfirm();
+                  }
+                  setCustomPopup(prev => ({ ...prev, isOpen: false }));
+                }}
+                className="px-6 py-2.5 bg-slate-900 hover:bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+              >
+                {customPopup.type === 'confirm' ? 'Confirm' : 'OK'}
+              </button>
             </div>
           </div>
         </div>

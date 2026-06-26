@@ -208,7 +208,7 @@ export default function BookingHistory() {
                 {filteredBookings.map((booking) => (
                   <tr 
                     key={booking.id} 
-                    onClick={() => navigate(`/hotel/bookings/${booking.id}`)}
+                    onClick={() => navigate(`/hotel/bookings/${booking.id}/info`)}
                     className="group border-b border-slate-50 last:border-0 hover:bg-slate-50/80 transition-colors cursor-pointer"
                   >
                     <td className="px-4 py-4">

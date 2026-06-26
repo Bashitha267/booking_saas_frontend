@@ -22,6 +22,7 @@ import BookingHistory from './hotel/BookingHistory'
 import PaymentHistory from './hotel/PaymentHistory'
 import FinanceReport from './hotel/FinanceReport'
 import BookingDetails from './hotel/booking_details'
+import BookingInfo from './hotel/BookingInfo'
 import PropertyManagement from './hotel/Property_managment'
 import Account from './hotel/Account'
 import SystemBilling from './hotel/SystemBilling'
@@ -56,6 +57,7 @@ export default function App() {
         <Route index element={<RequireRole allowed={['owner', 'admin', 'staff']}><HotelDashboard /></RequireRole>} />
         <Route path="bookings" element={<RequireRole allowed={['owner', 'admin', 'staff']}><BookingHistory /></RequireRole>} />
         <Route path="bookings/:id" element={<RequireRole allowed={['owner', 'admin', 'staff']}><BookingDetails /></RequireRole>} />
+        <Route path="bookings/:id/info" element={<RequireRole allowed={['owner', 'admin', 'staff']}><BookingInfo /></RequireRole>} />
         <Route path="payments" element={<RequireRole allowed={['owner', 'admin', 'staff']}><PaymentHistory /></RequireRole>} />
         <Route path="finance" element={<RequireRole allowed={['owner', 'admin']}><FinanceReport /></RequireRole>} />
         <Route path="property" element={<RequireRole allowed={['owner', 'admin']}><PropertyManagement /></RequireRole>} />

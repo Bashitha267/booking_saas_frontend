@@ -100,6 +100,13 @@ export default function AdminPayments() {
   const [allPayments, setAllPayments] = useState([])
   const [globalFee, setGlobalFee] = useState(0)
   const { showToast, ToastComponent } = useToast()
+  const [customPopup, setCustomPopup] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    type: 'confirm',
+    onConfirm: null
+  })
 
   const queryParams = useMemo(() => {
     const params = {}
@@ -296,18 +303,24 @@ export default function AdminPayments() {
     }
   }
 
-  const deletePayment = async (paymentId) => {
-    if (!window.confirm('Are you sure you want to delete this payment record? This action cannot be undone.')) return
-    
-    try {
-      await api.delete(`/admin/owner-payments/${paymentId}`)
-      // Remove from UI history list
-      setHistoryItems(prev => prev.filter(item => item.id !== paymentId))
-      setRefreshKey(prev => prev + 1) // Refresh main tables to update "amountPaid"
-      showToast('Payment deleted successfully', 'success')
-    } catch (err) {
-      showToast(err.response?.data?.message || 'Failed to delete payment', 'error')
-    }
+  const deletePayment = (paymentId) => {
+    setCustomPopup({
+      isOpen: true,
+      title: 'Delete Payment Record',
+      message: 'Are you sure you want to delete this payment record? This action cannot be undone.',
+      type: 'confirm',
+      onConfirm: async () => {
+        try {
+          await api.delete(`/admin/owner-payments/${paymentId}`)
+          // Remove from UI history list
+          setHistoryItems(prev => prev.filter(item => item.id !== paymentId))
+          setRefreshKey(prev => prev + 1) // Refresh main tables to update "amountPaid"
+          showToast('Payment deleted successfully', 'success')
+        } catch (err) {
+          showToast(err.response?.data?.message || 'Failed to delete payment', 'error')
+        }
+      }
+    })
   }
 
   const updateApprovalStatus = async (paymentId, status) => {
@@ -1000,6 +1013,37 @@ export default function AdminPayments() {
             </div>
             <div className="bg-slate-50/80 px-6 py-4 border-t border-slate-100 flex justify-end">
               <button onClick={() => setHistoryOwner(null)} className="admin-button-secondary !py-1.5 !px-4">Close History</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {customPopup.isOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[200] flex items-center justify-center p-6">
+          <div className="bg-white rounded-[2rem] w-full max-w-md p-6 md:p-8 shadow-2xl relative animate-in fade-in zoom-in duration-200">
+            <h3 className="text-lg md:text-xl font-black text-slate-800 mb-2">{customPopup.title}</h3>
+            <p className="text-xs md:text-sm font-bold text-slate-500 mb-6">{customPopup.message}</p>
+            
+            <div className="flex items-center justify-end gap-3">
+              {customPopup.type === 'confirm' && (
+                <button
+                  onClick={() => setCustomPopup(prev => ({ ...prev, isOpen: false }))}
+                  className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 text-xs font-black uppercase tracking-wider transition-all"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (customPopup.onConfirm) {
+                    customPopup.onConfirm();
+                  }
+                  setCustomPopup(prev => ({ ...prev, isOpen: false }));
+                }}
+                className="px-6 py-2.5 bg-slate-900 hover:bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-wider transition-all shadow-md active:scale-95"
+              >
+                {customPopup.type === 'confirm' ? 'Confirm' : 'OK'}
+              </button>
             </div>
           </div>
         </div>

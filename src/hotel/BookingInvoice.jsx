@@ -360,17 +360,24 @@ export default function BookingInvoice() {
               </div>
             )}
             
-            {/* Single line above Balance Due */}
+            {/* Balance Due / Paid stamp */}
             <div className="border-t border-slate-300 my-1.5"></div>
-            
-            <div className={`flex justify-between py-1.5 items-center font-bold ${
-              balanceDue <= 0 ? 'text-emerald-800' : 'text-red-900'
-            }`}>
-              <span className="uppercase text-[9px] tracking-wider">Balance Due</span>
-              <span className="text-sm font-black border-b-[3px] border-double border-current pb-0.5">
-                Rs. {Math.max(0, balanceDue).toFixed(2)}
-              </span>
-            </div>
+
+            {balanceDue <= 0 ? (
+              <div className="flex justify-between py-1.5 items-center font-bold text-emerald-800">
+                <span className="uppercase text-[9px] tracking-wider">Payment Status</span>
+                <span className="text-[10px] font-black uppercase tracking-widest border border-emerald-600 rounded px-2 py-0.5 text-emerald-700">
+                  ✓ Paid in Full
+                </span>
+              </div>
+            ) : (
+              <div className="flex justify-between py-1.5 items-center font-bold text-red-900">
+                <span className="uppercase text-[9px] tracking-wider">Balance Due</span>
+                <span className="text-sm font-black border-b-[3px] border-double border-current pb-0.5">
+                  Rs. {balanceDue.toFixed(2)}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

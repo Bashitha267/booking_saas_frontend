@@ -31,6 +31,30 @@ export default function AdminDashboard() {
   const [onlineUsers, setOnlineUsers] = useState([])
   const [error, setError] = useState('')
 
+  const [showDirectoryModal, setShowDirectoryModal] = useState(false)
+  const [properties, setProperties] = useState([])
+  const [propertiesLoading, setPropertiesLoading] = useState(false)
+
+  const fetchProperties = () => {
+    setPropertiesLoading(true)
+    api.get('/properties')
+      .then(res => {
+        setProperties(res.data.data || [])
+      })
+      .catch(err => console.error(err))
+      .finally(() => setPropertiesLoading(false))
+  }
+
+  const handleViewDirectory = () => {
+    setShowDirectoryModal(true)
+    fetchProperties()
+  }
+
+  const recentProperties = useMemo(() => {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    return properties.filter(p => p.createdAt && new Date(p.createdAt) >= cutoff)
+  }, [properties])
+
   const currentDate = new Date()
   const currentMonthLabel = currentDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
   const currentYear = currentDate.getFullYear()
@@ -143,6 +167,16 @@ export default function AdminDashboard() {
   const realUnpaidCount = useMemo(() => ownerRows.filter(r => r.status !== 'paid').length, [ownerRows])
   const promoCount = useMemo(() => billing.filter(b => b.isPromotion === 1).length, [billing])
 
+  const recentRegistrations = useMemo(() => {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    return owners.filter(owner => owner.createdAt && new Date(owner.createdAt) >= cutoff)
+  }, [owners])
+
+  const recentLogins = useMemo(() => {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000)
+    return recentLogged.filter(u => u.lastLoginAt && new Date(u.lastLoginAt) >= cutoff)
+  }, [recentLogged])
+
   return (
     <div className="space-y-6">
       {/* Header Section */}
@@ -215,13 +249,13 @@ export default function AdminDashboard() {
         <div className="admin-card !p-0 overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between bg-slate-50/30">
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest">Recent Registrations</h2>
-            <button className="text-[13px] font-bold text-blue-600 hover:text-blue-700 uppercase tracking-widest transition-colors">View Directory</button>
+            <button onClick={handleViewDirectory} className="text-[13px] font-bold text-blue-600 hover:text-blue-700 uppercase tracking-widest transition-colors">View Directory</button>
           </div>
-          <div className="p-4 space-y-1.5">
-            {owners.length === 0 ? (
-               <div className="py-8 text-center text-slate-400 font-medium text-sm">No recent registrations.</div>
+          <div className="p-4 space-y-1.5 overflow-y-auto max-h-72">
+            {recentRegistrations.length === 0 ? (
+               <div className="py-8 text-center text-slate-400 font-medium text-sm">No registrations in the last 24 hours.</div>
             ) : (
-              owners.slice(0, 6).map((owner) => (
+              recentRegistrations.map((owner) => (
                 <div key={owner.id} className="flex items-center justify-between rounded-xl p-2 transition-all hover:bg-slate-50">
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-lg bg-white border border-slate-100 flex items-center justify-center font-bold text-slate-400 text-[13px] shadow-sm">
@@ -301,11 +335,11 @@ export default function AdminDashboard() {
             <h2 className="text-sm font-bold text-slate-900 uppercase tracking-widest">Recent Logins</h2>
             <div className="h-2 w-2 rounded-full bg-blue-500 shadow-sm shadow-blue-200" />
           </div>
-          <div className="p-4 space-y-1.5">
-            {recentLogged.length === 0 ? (
-               <div className="py-8 text-center text-slate-400 font-medium text-sm">No recent login records.</div>
+          <div className="p-4 space-y-1.5 overflow-y-auto max-h-72">
+            {recentLogins.length === 0 ? (
+               <div className="py-8 text-center text-slate-400 font-medium text-sm">No login records in the last 24 hours.</div>
             ) : (
-              recentLogged.slice(0, 6).map((u) => (
+              recentLogins.map((u) => (
                 <div key={u.id} className="flex items-center justify-between rounded-xl p-2 transition-all hover:bg-slate-50">
                   <div className="flex items-center gap-3">
                     <div className="h-8 w-8 rounded-lg bg-white border border-slate-100 flex items-center justify-center font-bold text-slate-400 text-[13px] shadow-sm">
@@ -358,6 +392,67 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {showDirectoryModal && (
+        <div 
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-sm"
+          onClick={() => setShowDirectoryModal(false)}
+        >
+          <div 
+            className="relative bg-white rounded-3xl p-6 shadow-2xl max-w-2xl w-full overflow-hidden border border-slate-100 animate-in fade-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-between items-center mb-6">
+              <div>
+                <h3 className="text-lg font-black text-slate-900 uppercase tracking-wider">Property Directory</h3>
+                <p className="text-xs font-bold text-slate-400 mt-1">Properties registered in the last 24 hours</p>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowDirectoryModal(false)}
+                className="text-slate-400 hover:text-slate-600 rounded-lg p-1 hover:bg-slate-100 transition-colors"
+                aria-label="Close"
+              >
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="overflow-auto max-h-[60vh] space-y-3 pr-1">
+              {propertiesLoading ? (
+                <div className="py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">Loading directory...</div>
+              ) : recentProperties.length === 0 ? (
+                <div className="py-12 text-center text-slate-400 font-bold uppercase tracking-widest text-xs">No properties registered in the last 24 hours.</div>
+              ) : (
+                recentProperties.map((prop) => (
+                  <div key={prop.id} className="flex flex-col sm:flex-row sm:items-center justify-between rounded-2xl border border-slate-100 p-4 gap-4 transition-all hover:bg-slate-50/50">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <h4 className="font-black text-slate-900 text-sm">{prop.name}</h4>
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-tight ${prop.status === 'blocked' ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                          {prop.status}
+                        </span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-500">{prop.address}, {prop.city}, {prop.country}</p>
+                      <p className="text-[11px] font-bold text-slate-400 mt-2">
+                        Owner: <span className="text-slate-700">@{prop.ownerUsername || 'unknown'}</span> ({prop.ownerFirstName || ''} {prop.ownerLastName || ''})
+                      </p>
+                    </div>
+                    <div className="text-left sm:text-right text-[11px] font-bold text-slate-400 flex flex-col justify-between h-full">
+                      <div>
+                        <p>Email: <span className="text-slate-600">{prop.email || '—'}</span></p>
+                        <p>Phone: <span className="text-slate-600">{prop.phone || '—'}</span></p>
+                      </div>
+                      <p className="mt-2 text-slate-400">Registered {new Date(prop.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

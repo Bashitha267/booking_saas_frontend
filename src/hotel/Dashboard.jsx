@@ -67,7 +67,11 @@ export default function Dashboard() {
     paymentStatus: 'none',
     paymentMethod: 'cash',
     paymentAmount: '',
+    propertyId: '',
   });
+  const [modalRooms, setModalRooms] = useState([]);
+  const [modalBookings, setModalBookings] = useState([]);
+  const [isLoadingModalData, setIsLoadingModalData] = useState(false);
   const [systemStatus, setSystemStatus] = useState({ globalFee: 0, latestBilling: null });
   const [systemPayments, setSystemPayments] = useState([]);
   const [showSystemPayment, setShowSystemPayment] = useState(false);
@@ -141,6 +145,10 @@ export default function Dashboard() {
     nextDay.setDate(nextDay.getDate() + 1);
     const formattedCheckOut = formatLocalDate(nextDay);
 
+    const defaultPropId = activePropertyId === 'all'
+      ? (properties[0]?.id || '')
+      : Number(activePropertyId);
+
     setBookingForm({
       guestName: '',
       guestContact: '',
@@ -155,7 +163,19 @@ export default function Dashboard() {
       paymentStatus: 'none',
       paymentMethod: 'cash',
       paymentAmount: '',
+      propertyId: defaultPropId,
     });
+
+    if (activePropertyId === 'all') {
+      const filteredRooms = rooms.filter(r => r.propertyId === Number(defaultPropId));
+      const filteredBookings = bookings.filter(b => b.propertyId === Number(defaultPropId));
+      setModalRooms(filteredRooms);
+      setModalBookings(filteredBookings);
+    } else {
+      setModalRooms(rooms);
+      setModalBookings(bookings);
+    }
+
     setShowAddBooking(true);
     setSubmitStatus({ type: '', message: '' });
   };
@@ -238,6 +258,7 @@ export default function Dashboard() {
           }
         }
       } catch (error) {
+        console.error('Failed to fetch properties:', error);
         if (isMounted) {
           setProperties([]);
         }
@@ -251,9 +272,10 @@ export default function Dashboard() {
         const params = activePropertyId && activePropertyId !== 'all' ? { propertyId: activePropertyId } : {};
         const res = await api.get('/rooms', { params });
         if (isMounted) {
-          setRooms(res.data?.data || []);
+          setRooms((res.data?.data || []).filter(r => r.status !== 'blocked' && r.status !== 'maintenance'));
         }
       } catch (error) {
+        console.error('Failed to fetch rooms:', error);
         if (isMounted) {
           setRooms([]);
         }
@@ -280,6 +302,7 @@ export default function Dashboard() {
       setBookings(bookingsRes.data?.data || []);
       setPayments(paymentsRes.data?.data || []);
     } catch (error) {
+      console.error('Failed to fetch booking data:', error);
       setBookings([]);
       setPayments([]);
     }
@@ -305,6 +328,54 @@ export default function Dashboard() {
     fetchSystemStatus();
   }, [fetchBookingData, fetchSystemStatus]);
 
+  useEffect(() => {
+    if (!showAddBooking || !bookingForm.propertyId) {
+      setModalRooms([]);
+      setModalBookings([]);
+      return;
+    }
+
+    if (activePropertyId === Number(bookingForm.propertyId)) {
+      setModalRooms(rooms);
+      setModalBookings(bookings);
+      return;
+    }
+
+    if (activePropertyId === 'all') {
+      const filteredRooms = rooms.filter(r => r.propertyId === Number(bookingForm.propertyId));
+      const filteredBookings = bookings.filter(b => b.propertyId === Number(bookingForm.propertyId));
+      setModalRooms(filteredRooms);
+      setModalBookings(filteredBookings);
+      return;
+    }
+
+    let isMounted = true;
+    const fetchModalData = async () => {
+      setIsLoadingModalData(true);
+      try {
+        const params = { propertyId: bookingForm.propertyId };
+        const [roomsRes, bookingsRes] = await Promise.all([
+          api.get('/rooms', { params }),
+          api.get('/bookings', { params })
+        ]);
+        if (isMounted) {
+          setModalRooms((roomsRes.data?.data || []).filter(r => r.status !== 'blocked' && r.status !== 'maintenance'));
+          setModalBookings(bookingsRes.data?.data || []);
+        }
+      } catch (error) {
+        console.error('Failed to fetch modal property data:', error);
+      } finally {
+        if (isMounted) setIsLoadingModalData(false);
+      }
+    };
+
+    fetchModalData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [showAddBooking, bookingForm.propertyId, activePropertyId, rooms, bookings]);
+
   const handlePropertyChange = async (event) => {
     const nextId = event.target.value;
     setActivePropertyId(nextId);
@@ -313,15 +384,17 @@ export default function Dashboard() {
         await api.patch('/auth/current-property', { propertyId: Number(nextId) });
         updateUser({ currentPropertyId: Number(nextId) });
       } catch (error) {
+        console.error('Failed to switch current property:', error);
         // keep local selection for UI
       }
     }
   };
 
   const roomTypes = useMemo(() => {
-    const types = rooms.map((room) => room.roomType).filter(Boolean);
+    const sourceRooms = showAddBooking ? modalRooms : rooms;
+    const types = sourceRooms.map((room) => room.roomType).filter(Boolean);
     return Array.from(new Set(types));
-  }, [rooms]);
+  }, [rooms, modalRooms, showAddBooking]);
 
   const isRoomAvailable = useCallback((roomId, startDate, endDate) => {
     if (!startDate || !endDate) return true;
@@ -329,7 +402,8 @@ export default function Dashboard() {
     const end = new Date(endDate);
     start.setHours(0, 0, 0, 0);
     end.setHours(0, 0, 0, 0);
-    return !bookings.some((booking) => {
+    const sourceBookings = showAddBooking ? modalBookings : bookings;
+    return !sourceBookings.some((booking) => {
       if (booking.roomId !== roomId) return false;
       if (booking.status === 'cancelled') return false;
       const bookingStart = new Date(booking.checkInDate);
@@ -338,16 +412,17 @@ export default function Dashboard() {
       bookingEnd.setHours(0, 0, 0, 0);
       return bookingStart <= end && bookingEnd >= start;
     });
-  }, [bookings]);
+  }, [bookings, modalBookings, showAddBooking]);
 
   const availableRooms = useMemo(() => {
+    const sourceRooms = showAddBooking ? modalRooms : rooms;
     const filtered = bookingForm.roomType
-      ? rooms.filter((room) => room.roomType === bookingForm.roomType)
-      : rooms;
+      ? sourceRooms.filter((room) => room.roomType === bookingForm.roomType)
+      : sourceRooms;
     return filtered.filter((room) =>
       isRoomAvailable(room.id, checkInDate, bookingForm.checkOutDate)
     );
-  }, [rooms, bookingForm.roomType, bookingForm.checkOutDate, checkInDate, isRoomAvailable]);
+  }, [rooms, modalRooms, bookingForm.roomType, bookingForm.checkOutDate, checkInDate, isRoomAvailable, showAddBooking]);
 
   useEffect(() => {
     const availableIds = new Set(availableRooms.map((room) => room.id));
@@ -511,10 +586,12 @@ export default function Dashboard() {
         paymentStatus: 'none',
         paymentMethod: 'cash',
         paymentAmount: '',
+        propertyId: '',
       });
       await fetchBookingData();
     } catch (error) {
-      setSubmitStatus({ type: 'error', message: 'Failed to create booking.' });
+      console.error('Error creating booking:', error);
+      setSubmitStatus({ type: 'error', message: error.response?.data?.message || 'Failed to create booking.' });
     }
   };
 
@@ -689,6 +766,29 @@ export default function Dashboard() {
             </div>
 
             <div className="p-6 md:p-10 space-y-6 md:space-y-8 overflow-y-auto flex-1 custom-scrollbar">
+              {properties.length > 1 && (
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Property</label>
+                  <select
+                    value={bookingForm.propertyId}
+                    onChange={(e) => {
+                      const newPropId = Number(e.target.value);
+                      setBookingForm((prev) => ({
+                        ...prev,
+                        propertyId: newPropId,
+                        roomType: '',
+                        roomIds: [],
+                      }));
+                    }}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                  >
+                    {properties.map((property) => (
+                      <option key={property.id} value={property.id}>{property.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Guest Full Name</label>
@@ -867,14 +967,14 @@ export default function Dashboard() {
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Available Rooms</label>
                   <div className="min-h-[54px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-                    {isLoadingRooms && (
+                    {(isLoadingRooms || isLoadingModalData) && (
                       <p className="text-[10px] font-bold text-slate-400">Loading...</p>
                     )}
-                    {!isLoadingRooms && availableRooms.length === 0 && (
+                    {!isLoadingRooms && !isLoadingModalData && availableRooms.length === 0 && (
                       <p className="text-[10px] font-bold text-slate-400">No rooms available for selected dates.</p>
                     )}
                     <div className="flex flex-wrap gap-2">
-                      {!isLoadingRooms && availableRooms.map((room) => (
+                      {!isLoadingRooms && !isLoadingModalData && availableRooms.map((room) => (
                         <button
                           key={room.id}
                           type="button"
@@ -901,7 +1001,7 @@ export default function Dashboard() {
                   <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Selected Rooms & Price Breakdown</h4>
                   <div className="divide-y divide-slate-100 max-h-48 overflow-y-auto pr-1">
                     {bookingForm.roomIds.map((roomId) => {
-                      const r = rooms.find((room) => room.id === roomId);
+                      const r = (showAddBooking ? modalRooms : rooms).find((room) => room.id === roomId);
                       if (!r) return null;
                       const stayNights = (() => {
                         if (!checkInDate || !bookingForm.checkOutDate) return 0;
@@ -940,7 +1040,7 @@ export default function Dashboard() {
                     <span className="text-xs font-black uppercase text-slate-600 tracking-wider">Total Stay Charge</span>
                     <span className="text-sm font-black text-blue-600">
                       Rs. {bookingForm.roomIds.reduce((sum, id) => {
-                        const r = rooms.find(room => room.id === id);
+                        const r = (showAddBooking ? modalRooms : rooms).find(room => room.id === id);
                         const stayNights = (() => {
                           if (!checkInDate || !bookingForm.checkOutDate) return 0;
                           const start = new Date(checkInDate);
@@ -974,7 +1074,7 @@ export default function Dashboard() {
       )}
 
 
-      {/* System Payment Modal */}
+      {/* System Payment Modal */}
       {showSystemPayment && isOwner && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[150] flex items-center justify-center p-4">
           <div className="bg-white w-full max-w-xl rounded-[1.5rem] shadow-2xl overflow-hidden animate-in fade-in slide-in-from-bottom-8 duration-500">
@@ -1216,6 +1316,7 @@ export default function Dashboard() {
                         showToast('Payment submitted for verification', 'success');
                         setShowSystemPayment(false);
                       } catch (error) {
+                        console.error('Failed to initialize dashboard:', error);
                         showToast(error.response?.data?.message || 'Failed to submit payment', 'error');
                       } finally {
                         setIsSubmittingSystemPayment(false);
@@ -1399,6 +1500,7 @@ export default function Dashboard() {
                       const isStart = new Date(b.checkInDate).toDateString() === cell.date.toDateString();
                       if (isStart) {
                         const rowIndex = bookingRowMap[b.id] || 0;
+                        if (rowIndex >= 2) return null;
                         const roomNumber = roomMap[b.roomId] || '';
                         return (
                           <div
@@ -1423,6 +1525,28 @@ export default function Dashboard() {
                       return null;
                     })}
                   </div>
+                  {(() => {
+                    const hiddenStartsCount = bookings.filter(b => {
+                      const isStart = new Date(b.checkInDate).toDateString() === cell.date.toDateString();
+                      const rowIndex = bookingRowMap[b.id] || 0;
+                      return isStart && rowIndex >= 2;
+                    }).length;
+                    
+                    if (hiddenStartsCount > 0) {
+                      return (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setViewType('timeline');
+                          }}
+                          className="absolute bottom-3 left-4 right-4 bg-white border border-slate-200 hover:bg-slate-50 text-blue-600 hover:text-blue-700 text-[10px] font-black uppercase tracking-widest py-2 rounded-xl text-center transition-all shadow-sm z-30 active:scale-95"
+                        >
+                          View More (+{hiddenStartsCount})
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
               );
             })}
