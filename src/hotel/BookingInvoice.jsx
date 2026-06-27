@@ -37,7 +37,9 @@ export default function BookingInvoice() {
           roomType: bookingData.roomType || 'Unknown',
           guestCount: (Number(bookingData.adults || 0) + Number(bookingData.children || 0)) || 1,
           startDate: bookingData.checkInDate,
+          checkInTime: bookingData.checkInTime || '14:00:00',
           endDate: bookingData.checkOutDate,
+          checkOutTime: bookingData.checkOutTime || '11:00:00',
           status: bookingData.status,
           nicPassport: bookingData.guestNic || 'N/A',
           country,
@@ -113,6 +115,17 @@ export default function BookingInvoice() {
     if (balanceDue <= 0) return 'paid';
     return 'pending';
   }, [totalPaid, balanceDue, grandTotal]);
+
+  // Helper: format HH:MM:SS or HH:MM to 12-hour display
+  const fmtTime = (t) => {
+    if (!t) return '';
+    const [hStr, mStr] = t.split(':');
+    const h = parseInt(hStr, 10);
+    const m = mStr ? mStr.slice(0, 2) : '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12  = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m} ${ampm}`;
+  };
 
   // Auto-print when loaded
   useEffect(() => {
@@ -227,8 +240,8 @@ export default function BookingInvoice() {
             <div className="space-y-1.5">
               <p className="font-bold text-slate-900">Room {booking.roomNumber}</p>
               <p className="text-slate-600 uppercase font-semibold text-[10px]">{booking.roomType}</p>
-              <p className="text-slate-600 mt-1">Check-in: {booking.startDate?.split('T')[0]}</p>
-              <p className="text-slate-600">Check-out: {booking.endDate?.split('T')[0]}</p>
+              <p className="text-slate-600 mt-1">Check-in: {booking.startDate?.split('T')[0]} <span className="font-bold text-blue-700">at {fmtTime(booking.checkInTime)}</span></p>
+              <p className="text-slate-600">Check-out: {booking.endDate?.split('T')[0]} <span className="font-bold text-amber-700">at {fmtTime(booking.checkOutTime)}</span></p>
               <p className="text-slate-600 font-bold">Length of Stay: {nights} {nights === 1 ? 'Night' : 'Nights'}</p>
             </div>
           </div>

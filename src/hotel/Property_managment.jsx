@@ -519,6 +519,7 @@ export default function PropertyManagement() {
 
     try {
       setManageCategoryStatus({ type: 'loading', message: 'Updating rooms...' });
+      const updatedIds = new Set(roomsToUpdate.map(r => r.id));
       const payload = {
         roomType: manageCategoryForm.roomType.trim(),
         capacityAdults: Number(manageCategoryForm.capacityAdults) || 1,
@@ -534,9 +535,25 @@ export default function PropertyManagement() {
         roomsToUpdate.map((room) => api.put(`/rooms/${room.id}`, payload))
       );
 
-      await refreshRooms();
+      // ── Immediately patch local state so the card updates without a refresh ──
+      setRooms(prev => prev.map(room => {
+        if (!updatedIds.has(room.id)) return room;
+        return {
+          ...room,
+          roomType: payload.roomType,
+          capacityAdults: payload.capacityAdults,
+          capacityChildren: payload.capacityChildren,
+          price: payload.price,
+          hasAc: payload.hasAc,
+          ...(payload.status ? { status: payload.status } : {}),
+        };
+      }));
+
       setManageCategoryStatus({ type: 'success', message: 'Category settings updated.' });
-      setSelectedManageCategoryName(manageCategoryForm.roomType.trim());
+      setSelectedManageCategoryName(payload.roomType);
+
+      // Background sync to confirm server state
+      refreshRooms().catch(() => {});
     } catch (error) {
       console.error('Failed to update category:', error);
       setManageCategoryStatus({ type: 'error', message: 'Failed to update category.' });
@@ -588,9 +605,7 @@ export default function PropertyManagement() {
       return;
     }
 
-    const roomsToUpdate = editTarget.rooms.filter((room) => (
-      !editTypeForm.propertyId || String(room.propertyId) === String(editTypeForm.propertyId)
-    ));
+    const roomsToUpdate = editTarget.rooms;
 
     if (!roomsToUpdate.length) {
       setEditStatus({ type: 'error', message: 'No rooms found for the selected property.' });
@@ -599,6 +614,7 @@ export default function PropertyManagement() {
 
     try {
       setEditStatus({ type: 'loading', message: 'Updating rooms...' });
+      const updatedIds = new Set(roomsToUpdate.map(r => r.id));
       const payload = {
         roomType: editTypeForm.roomType.trim(),
         capacityAdults: Number(editTypeForm.capacityAdults) || 1,
@@ -614,10 +630,26 @@ export default function PropertyManagement() {
         roomsToUpdate.map((room) => api.put(`/rooms/${room.id}`, payload))
       );
 
-      await refreshRooms();
+      // ── Immediately patch local state so the card price updates without a refresh ──
+      setRooms(prev => prev.map(room => {
+        if (!updatedIds.has(room.id)) return room;
+        return {
+          ...room,
+          roomType: payload.roomType,
+          capacityAdults: payload.capacityAdults,
+          capacityChildren: payload.capacityChildren,
+          price: payload.price,
+          hasAc: payload.hasAc,
+          ...(payload.status ? { status: payload.status } : {}),
+        };
+      }));
+
       setEditStatus({ type: 'success', message: 'Room settings updated.' });
       setIsEditModalOpen(false);
       setEditTarget(null);
+
+      // Background sync to confirm server state
+      refreshRooms().catch(() => {});
     } catch (error) {
       setEditStatus({ type: 'error', message: 'Failed to update room settings.' });
     }
@@ -1277,19 +1309,7 @@ export default function PropertyManagement() {
             <p className="text-[11px] text-slate-400 font-bold mb-8">Update settings for {editTarget?.name || 'this category'}.</p>
 
             <div className="space-y-6">
-              <div>
-                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Apply To</label>
-                <select
-                  value={editTypeForm.propertyId}
-                  onChange={handleEditTypeChange('propertyId')}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[11px] font-bold outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                >
-                  <option value="">All properties</option>
-                  {editPropertyOptions.map((property) => (
-                    <option key={property.id} value={property.id}>{property.name}</option>
-                  ))}
-                </select>
-              </div>
+
               <div>
                 <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Room Type Name</label>
                 <input

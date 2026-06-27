@@ -90,7 +90,10 @@ export default function BookingInfo() {
           id: d.id, guestName: d.guestName, guestContact: d.guestContact,
           guestNic: d.guestNic || '', roomNumber: d.roomNumber || 'N/A',
           roomType: d.roomType || 'Unknown', startDate: d.checkInDate,
-          endDate: d.checkOutDate, status: d.status,
+          checkInTime: d.checkInTime || '14:00:00',
+          endDate: d.checkOutDate,
+          checkOutTime: d.checkOutTime || '11:00:00',
+          status: d.status,
           adults: Number(d.adults || 0), children: Number(d.children || 0),
           roomPrice: Number(d.roomPrice || 0), discount: Number(d.discount || 0),
           country: notes[0] || '', address: notes[1] || '',
@@ -186,6 +189,15 @@ export default function BookingInfo() {
   const statusCfg = STATUS_CONFIG.find(s => s.value === booking?.status) || STATUS_CONFIG[0];
   const idCfg     = ID_OPTIONS.find(o => o.value === idStatus) || ID_OPTIONS[0];
   const fmtMoney  = (n) => `Rs. ${Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  const fmtTime   = (t) => {
+    if (!t) return '';
+    const [hStr, mStr] = t.split(':');
+    const h = parseInt(hStr, 10);
+    const m = mStr ? mStr.slice(0, 2) : '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12  = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m} ${ampm}`;
+  };
 
   if (isLoading) return (
     <div className="p-8 text-center text-slate-400 text-xs font-bold uppercase tracking-widest animate-pulse">
@@ -373,12 +385,14 @@ export default function BookingInfo() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Check-In Date</label>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Check-In</label>
                   <p className="text-sm font-semibold text-slate-700">{booking.startDate?.split('T')[0] || '—'}</p>
+                  <p className="text-xs text-blue-600 font-bold mt-0.5">{fmtTime(booking.checkInTime)}</p>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Check-Out Date</label>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Check-Out</label>
                   <p className="text-sm font-semibold text-slate-700">{booking.endDate?.split('T')[0] || '—'}</p>
+                  <p className="text-xs text-amber-600 font-bold mt-0.5">{fmtTime(booking.checkOutTime)}</p>
                 </div>
               </div>
 
@@ -640,10 +654,12 @@ export default function BookingInfo() {
                 <div className="bg-slate-50 border border-slate-200 rounded p-3">
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Current Check-In</p>
                   <p className="font-black text-slate-800">{booking.startDate?.split('T')[0]}</p>
+                  <p className="text-[10px] font-bold text-blue-600 mt-0.5">{fmtTime(booking.checkInTime)}</p>
                 </div>
                 <div className="bg-amber-50 border border-amber-200 rounded p-3">
                   <p className="text-[10px] text-amber-500 font-bold uppercase tracking-wider mb-1">Current Check-Out</p>
                   <p className="font-black text-amber-700">{booking.endDate?.split('T')[0]}</p>
+                  <p className="text-[10px] font-bold text-amber-600 mt-0.5">{fmtTime(booking.checkOutTime)}</p>
                 </div>
               </div>
 

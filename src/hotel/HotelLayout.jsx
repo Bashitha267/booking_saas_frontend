@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import useAuth from '../auth/useAuth';
 
 const baseNavItems = [
@@ -18,7 +18,27 @@ export default function HotelLayout() {
   const [showMoreMobile, setShowMoreMobile] = useState(false);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const role = user?.role || 'staff';
+
+  // Determine which nav item should appear active, accounting for navigation
+  // source (e.g. clicking a booking from Payment History should keep Payments active).
+  const isNavActive = (itemPath) => {
+    const { pathname, state } = location;
+    const fromPayments = state?.from === 'payments';
+    const onBookingDetail = /^\/hotel\/bookings\/\d+/.test(pathname);
+
+    if (onBookingDetail) {
+      // Came from Payment History → highlight Payments
+      if (fromPayments) return itemPath === '/hotel/payments';
+      // Came from Bookings list (or direct) → highlight Bookings
+      return itemPath === '/hotel/bookings';
+    }
+
+    // Default: exact match for /hotel, prefix match for everything else
+    if (itemPath === '/hotel') return pathname === '/hotel';
+    return pathname === itemPath || pathname.startsWith(itemPath + '/');
+  };
 
   const navItems = useMemo(() => {
     if (role === 'staff') {
@@ -64,25 +84,27 @@ export default function HotelLayout() {
         </div>
 
         <div className="flex-1 overflow-y-auto py-6 space-y-1">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.name}
-              to={item.path}
-              end={item.path === '/hotel'}
-              className={({ isActive }) =>
-                `flex items-center px-4 py-3 text-sm font-medium transition-all group ${
-                  isActive 
-                    ? 'bg-blue-900 text-white border-l-4 border-blue-400' 
-                    : 'text-blue-100 hover:bg-blue-700/50 hover:text-white'
-                }`
-              }
-            >
-              <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon} />
-              </svg>
-              {isOpen && <span className="ml-4 truncate">{item.name}</span>}
-            </NavLink>
-          ))}
+          {navItems.map((item) => {
+            const active = isNavActive(item.path);
+            return (
+              <NavLink
+                key={item.name}
+                to={item.path}
+                className={
+                  `flex items-center px-4 py-3 text-sm font-medium transition-all group ${
+                    active
+                      ? 'bg-blue-900 text-white border-l-4 border-blue-400'
+                      : 'text-blue-100 hover:bg-blue-700/50 hover:text-white'
+                  }`
+                }
+              >
+                <svg className="w-6 h-6 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon} />
+                </svg>
+                {isOpen && <span className="ml-4 truncate">{item.name}</span>}
+              </NavLink>
+            );
+          })}
         </div>
 
         <div className="p-4 border-t border-blue-700 flex-shrink-0">
@@ -243,31 +265,25 @@ export default function HotelLayout() {
 
       {/* Mobile Bottom Bar */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 h-20 flex items-center justify-around px-4 z-[50] shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
-        {navItems.slice(0, 4).map((item) => (
-          <NavLink
-            key={item.name}
-            to={item.path}
-            end={item.path === '/hotel'}
-            className={({ isActive }) =>
-              `flex flex-col items-center justify-center transition-all ${
-                isActive ? 'text-blue-600' : 'text-slate-400'
-              }`
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <div className={`p-2 rounded-xl transition-all ${isActive ? 'bg-blue-100 text-blue-600' : 'text-slate-400'}`}>
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d={item.icon} />
-                  </svg>
-                </div>
-                <span className={`text-[8px] font-black mt-1 uppercase tracking-widest ${isActive ? 'text-blue-600' : 'text-slate-400'}`}>
-                  {item.name}
-                </span>
-              </>
-            )}
-          </NavLink>
-        ))}
+        {navItems.slice(0, 4).map((item) => {
+          const active = isNavActive(item.path);
+          return (
+            <NavLink
+              key={item.name}
+              to={item.path}
+              className={`flex flex-col items-center justify-center transition-all ${active ? 'text-blue-600' : 'text-slate-400'}`}
+            >
+              <div className={`p-2 rounded-xl transition-all ${active ? 'bg-blue-100 text-blue-600' : 'text-slate-400'}`}>
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d={item.icon} />
+                </svg>
+              </div>
+              <span className={`text-[8px] font-black mt-1 uppercase tracking-widest ${active ? 'text-blue-600' : 'text-slate-400'}`}>
+                {item.name}
+              </span>
+            </NavLink>
+          );
+        })}
         {hasMoreOptions && (
           <button 
             onClick={() => setShowMoreMobile(true)}

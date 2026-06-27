@@ -157,7 +157,7 @@ export default function PaymentHistory() {
       const totalPaid = bPayments
         .filter(p => (p.status || 'paid') !== 'refunded')
         .reduce((s, p) => s + Number(p.amount || 0), 0);
-      const totalPrice = Number(b.totalPrice || b.price || 0);
+      const totalPrice = Number(b.roomPrice || 0);
       const remaining  = Math.max(0, totalPrice - totalPaid);
       return {
         booking: b,
@@ -296,7 +296,7 @@ export default function PaymentHistory() {
                   <tr><td colSpan="8" className="p-10 text-center text-rose-500 text-xs font-bold">{loadError}</td></tr>
                 )}
                 {paginatedPayments.map(pay => (
-                  <tr key={pay.id} onClick={() => navigate(`/hotel/bookings/${pay.bookingId}`)} className="hover:bg-slate-50/50 transition-colors group cursor-pointer">
+                  <tr key={pay.id} onClick={() => navigate(`/hotel/bookings/${pay.bookingId}`, { state: { from: 'payments' } })} className="hover:bg-slate-50/50 transition-colors group cursor-pointer">
                     <td className="p-5">
                       <p className="text-xs font-black text-slate-700">{pay.dateValue ? pay.dateValue.toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}</p>
                       <p className="text-[10px] font-bold text-slate-400 mt-0.5">{pay.dateValue ? pay.dateValue.toLocaleTimeString('default', { hour: '2-digit', minute: '2-digit', hour12: true }) : '--'}</p>
@@ -326,7 +326,7 @@ export default function PaymentHistory() {
                       )}
                     </td>
                     <td className="p-5 text-right">
-                      <button onClick={() => navigate(`/hotel/bookings/${pay.bookingId}`)} className="p-2 text-slate-300 hover:text-blue-500 transition-colors">
+                      <button onClick={(e) => { e.stopPropagation(); navigate(`/hotel/bookings/${pay.bookingId}`, { state: { from: 'payments' } }); }} className="p-2 text-slate-300 hover:text-blue-500 transition-colors">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 5l7 7-7 7" /></svg>
                       </button>
                     </td>
@@ -368,12 +368,12 @@ export default function PaymentHistory() {
                 )}
                 {bwPaginatedRows.map(row => {
                   const b = row.booking;
-                  const checkIn  = b.checkIn  ? new Date(b.checkIn).toLocaleDateString('default', { day: 'numeric', month: 'short' }) : '-';
-                  const checkOut = b.checkOut ? new Date(b.checkOut).toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+                  const checkIn  = b.checkInDate  ? new Date(b.checkInDate).toLocaleDateString('default', { day: 'numeric', month: 'short' }) : '-';
+                  const checkOut = b.checkOutDate ? new Date(b.checkOutDate).toLocaleDateString('default', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
                   const isPaid      = row.remaining <= 0;
                   const isPartial   = row.totalPaid > 0 && !isPaid;
                   return (
-                    <tr key={b.id} onClick={() => navigate(`/hotel/bookings/${b.id}`)} className="hover:bg-blue-50/40 transition-colors group cursor-pointer">
+                    <tr key={b.id} onClick={() => navigate(`/hotel/bookings/${b.id}`, { state: { from: 'payments' } })} className="hover:bg-blue-50/40 transition-colors group cursor-pointer">
                       <td className="p-5">
                         <span className="text-xs font-black text-slate-500">#{b.id}</span>
                         <span className={`ml-2 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider border ${
@@ -422,7 +422,7 @@ export default function PaymentHistory() {
                             </svg>
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); navigate(`/hotel/bookings/${b.id}`); }}
+                            onClick={(e) => { e.stopPropagation(); navigate(`/hotel/bookings/${b.id}`, { state: { from: 'payments' } }); }}
                             className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50 hover:border-blue-100 transition-all"
                             title="Go to booking"
                           >
@@ -525,7 +525,7 @@ export default function PaymentHistory() {
             {/* Footer */}
             <div className="px-6 md:px-8 py-4 border-t border-slate-100 flex justify-end gap-3 shrink-0">
               <button
-                onClick={() => navigate(`/hotel/bookings/${historyPopup.booking.id}`)}
+                onClick={() => navigate(`/hotel/bookings/${historyPopup.booking.id}`, { state: { from: 'payments' } })}
                 className="px-5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-600 text-xs font-black uppercase tracking-wider transition-all"
               >
                 View Booking

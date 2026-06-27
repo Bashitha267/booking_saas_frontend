@@ -147,6 +147,19 @@ export default function BookingDetails() {
         const country = notesParts[0] || '';
         const address = notesParts[1] || '';
 
+        // bookedRoomPrice is the price snapshot at booking time.
+        // If it's null (old booking before migration), fall back to the
+        // room's current price so the page always shows a meaningful value.
+        let resolvedRoomPrice = Number(bookingData.roomPrice || 0);
+        if (!resolvedRoomPrice && bookingData.roomId) {
+          try {
+            const roomRes = await api.get(`/rooms/${bookingData.roomId}`);
+            resolvedRoomPrice = Number(roomRes.data?.data?.price || 0);
+          } catch (_) {
+            // silently ignore — price stays 0 if room fetch fails
+          }
+        }
+
         const mappedBooking = {
           id: bookingData.id,
           guestName: bookingData.guestName,
@@ -156,7 +169,9 @@ export default function BookingDetails() {
           roomType: bookingData.roomType || 'Unknown',
           guestCount: (Number(bookingData.adults || 0) + Number(bookingData.children || 0)) || 1,
           startDate: bookingData.checkInDate,
+          checkInTime: bookingData.checkInTime || '14:00:00',
           endDate: bookingData.checkOutDate,
+          checkOutTime: bookingData.checkOutTime || '11:00:00',
           status: bookingData.status,
           nicPassport: bookingData.guestNic || 'N/A',
           country,
@@ -164,7 +179,8 @@ export default function BookingDetails() {
           adults: bookingData.adults,
           children: bookingData.children,
           propertyId: bookingData.propertyId,
-          roomPrice: Number(bookingData.roomPrice || 0),
+          roomId: bookingData.roomId,
+          roomPrice: resolvedRoomPrice,
           discount: Number(bookingData.discount || 0),
         };
 
@@ -214,7 +230,9 @@ export default function BookingDetails() {
             country,
             address,
             checkInDate: bookingData.checkInDate || '',
+            checkInTime: bookingData.checkInTime || '14:00',
             checkOutDate: bookingData.checkOutDate || '',
+            checkOutTime: bookingData.checkOutTime || '11:00',
             adults: Number(bookingData.adults || 0),
             children: Number(bookingData.children || 0),
             status: bookingData.status || 'pending',
@@ -435,7 +453,9 @@ export default function BookingDetails() {
       country: booking.country || '',
       address: booking.address || '',
       checkInDate: booking.startDate || '',
+      checkInTime: booking.checkInTime ? booking.checkInTime.slice(0, 5) : '14:00',
       checkOutDate: booking.endDate || '',
+      checkOutTime: booking.checkOutTime ? booking.checkOutTime.slice(0, 5) : '11:00',
       adults: Number(booking.adults || 0),
       children: Number(booking.children || 0),
       status: booking.status || 'pending',
@@ -473,7 +493,9 @@ export default function BookingDetails() {
         guestContact: editForm.guestContact,
         guestNic: editForm.guestNic || null,
         checkInDate: editForm.checkInDate,
+        checkInTime: editForm.checkInTime || '14:00',
         checkOutDate: editForm.checkOutDate,
+        checkOutTime: editForm.checkOutTime || '11:00',
         adults: Number(editForm.adults || 0),
         children: Number(editForm.children || 0),
         status: editForm.status,
@@ -492,7 +514,9 @@ export default function BookingDetails() {
         country: editForm.country,
         address: editForm.address,
         startDate: editForm.checkInDate,
+        checkInTime: editForm.checkInTime || '14:00',
         endDate: editForm.checkOutDate,
+        checkOutTime: editForm.checkOutTime || '11:00',
         adults: updatedAdults,
         children: updatedChildren,
         guestCount: updatedAdults + updatedChildren || 1,
@@ -518,6 +542,17 @@ export default function BookingDetails() {
       console.error('Failed to update booking status:', error);
       setBooking((prev) => ({ ...prev, status: previousStatus }));
     }
+  };
+
+  // Helper: format HH:MM:SS or HH:MM to 12-hour display
+  const fmtTime = (t) => {
+    if (!t) return '';
+    const [hStr, mStr] = t.split(':');
+    const h = parseInt(hStr, 10);
+    const m = mStr ? mStr.slice(0, 2) : '00';
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12  = h % 12 === 0 ? 12 : h % 12;
+    return `${h12}:${m} ${ampm}`;
   };
 
   if (isLoading) {
@@ -822,6 +857,19 @@ export default function BookingDetails() {
                   )}
                 </div>
                 <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Check-in Time</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="time"
+                      className="w-full border border-slate-300 rounded px-3 h-[38px] text-sm outline-none focus:border-blue-600"
+                      value={editForm.checkInTime}
+                      onChange={handleEditChange('checkInTime')}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-blue-600">{fmtTime(booking.checkInTime)}</p>
+                  )}
+                </div>
+                <div>
                   <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Check-out Date</label>
                   {isEditingDetails ? (
                     <input
@@ -832,6 +880,19 @@ export default function BookingDetails() {
                     />
                   ) : (
                     <p className="text-sm font-semibold text-slate-700">{booking.endDate?.split('T')[0]}</p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Check-out Time</label>
+                  {isEditingDetails ? (
+                    <input
+                      type="time"
+                      className="w-full border border-slate-300 rounded px-3 h-[38px] text-sm outline-none focus:border-blue-600"
+                      value={editForm.checkOutTime}
+                      onChange={handleEditChange('checkOutTime')}
+                    />
+                  ) : (
+                    <p className="text-sm font-semibold text-amber-600">{fmtTime(booking.checkOutTime)}</p>
                   )}
                 </div>
               </div>

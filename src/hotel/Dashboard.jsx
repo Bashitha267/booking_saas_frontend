@@ -59,7 +59,9 @@ export default function Dashboard() {
     guestNic: '',
     country: '',
     address: '',
+    checkInTime: '14:00',
     checkOutDate: '',
+    checkOutTime: '11:00',
     adults: 1,
     children: 0,
     roomType: '',
@@ -155,7 +157,9 @@ export default function Dashboard() {
       guestNic: '',
       country: '',
       address: '',
+      checkInTime: '14:00',
       checkOutDate: formattedCheckOut,
+      checkOutTime: '11:00',
       adults: 1,
       children: 0,
       roomType: '',
@@ -396,21 +400,23 @@ export default function Dashboard() {
     return Array.from(new Set(types));
   }, [rooms, modalRooms, showAddBooking]);
 
-  const isRoomAvailable = useCallback((roomId, startDate, endDate) => {
+  const isRoomAvailable = useCallback((roomId, startDate, startTime, endDate, endTime) => {
     if (!startDate || !endDate) return true;
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    start.setHours(0, 0, 0, 0);
-    end.setHours(0, 0, 0, 0);
+    // Build full datetime strings for overlap comparison
+    const reqStart = new Date(`${startDate}T${startTime || '14:00'}`);
+    const reqEnd   = new Date(`${endDate}T${endTime || '11:00'}`);
     const sourceBookings = showAddBooking ? modalBookings : bookings;
     return !sourceBookings.some((booking) => {
       if (booking.roomId !== roomId) return false;
       if (booking.status === 'cancelled') return false;
-      const bookingStart = new Date(booking.checkInDate);
-      const bookingEnd = new Date(booking.checkOutDate);
-      bookingStart.setHours(0, 0, 0, 0);
-      bookingEnd.setHours(0, 0, 0, 0);
-      return bookingStart <= end && bookingEnd >= start;
+      const bookStart = new Date(
+        `${booking.checkInDate?.split('T')[0] || booking.checkInDate}T${booking.checkInTime || '14:00'}`
+      );
+      const bookEnd = new Date(
+        `${booking.checkOutDate?.split('T')[0] || booking.checkOutDate}T${booking.checkOutTime || '11:00'}`
+      );
+      // Overlap: existing booking overlaps if bookStart < reqEnd AND bookEnd > reqStart
+      return bookStart < reqEnd && bookEnd > reqStart;
     });
   }, [bookings, modalBookings, showAddBooking]);
 
@@ -420,9 +426,15 @@ export default function Dashboard() {
       ? sourceRooms.filter((room) => room.roomType === bookingForm.roomType)
       : sourceRooms;
     return filtered.filter((room) =>
-      isRoomAvailable(room.id, checkInDate, bookingForm.checkOutDate)
+      isRoomAvailable(
+        room.id,
+        checkInDate,
+        bookingForm.checkInTime,
+        bookingForm.checkOutDate,
+        bookingForm.checkOutTime
+      )
     );
-  }, [rooms, modalRooms, bookingForm.roomType, bookingForm.checkOutDate, checkInDate, isRoomAvailable, showAddBooking]);
+  }, [rooms, modalRooms, bookingForm.roomType, bookingForm.checkOutDate, bookingForm.checkOutTime, checkInDate, bookingForm.checkInTime, isRoomAvailable, showAddBooking]);
 
   useEffect(() => {
     const availableIds = new Set(availableRooms.map((room) => room.id));
@@ -542,7 +554,9 @@ export default function Dashboard() {
         guestContact: bookingForm.guestContact,
         guestNic: bookingForm.guestNic || null,
         checkInDate,
+        checkInTime: bookingForm.checkInTime || '14:00',
         checkOutDate: bookingForm.checkOutDate,
+        checkOutTime: bookingForm.checkOutTime || '11:00',
         adults: Number(bookingForm.adults) || 1,
         children: Number(bookingForm.children) || 0,
         status: 'confirmed',
@@ -578,7 +592,9 @@ export default function Dashboard() {
         guestNic: '',
         country: '',
         address: '',
+        checkInTime: '14:00',
         checkOutDate: '',
+        checkOutTime: '11:00',
         adults: 1,
         children: 0,
         roomType: '',
@@ -758,7 +774,7 @@ export default function Dashboard() {
             <div className="p-6 md:p-8 bg-blue-600 text-white flex items-center justify-between shrink-0">
               <div>
                 <h2 className="text-xl md:text-3xl font-black tracking-tight">New Reservation</h2>
-                <p className="text-[10px] md:text-xs font-bold opacity-80 uppercase tracking-widest mt-1">Check-in pre-set for {checkInDate || 'Selected date'}</p>
+            <p className="text-[10px] md:text-xs font-bold opacity-80 uppercase tracking-widest mt-1">Check-in pre-set for {checkInDate || 'Selected date'} at {bookingForm.checkInTime || '14:00'}</p>
               </div>
               <button onClick={() => setShowAddBooking(false)} className="p-2 hover:bg-blue-500 rounded-xl transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" /></svg>
@@ -887,8 +903,8 @@ export default function Dashboard() {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
-                <div className="space-y-2 col-span-2 md:col-span-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Check-in</label>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Check-in Date</label>
                   <input
                     type="date"
                     value={checkInDate}
@@ -912,12 +928,30 @@ export default function Dashboard() {
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-[46px] text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
-                <div className="space-y-2 col-span-2 md:col-span-1">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Check-out</label>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Check-in Time</label>
+                  <input
+                    type="time"
+                    value={bookingForm.checkInTime}
+                    onChange={handleBookingChange('checkInTime')}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-[46px] text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Check-out Date</label>
                   <input
                     type="date"
                     value={bookingForm.checkOutDate}
                     onChange={handleBookingChange('checkOutDate')}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-[46px] text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Check-out Time</label>
+                  <input
+                    type="time"
+                    value={bookingForm.checkOutTime}
+                    onChange={handleBookingChange('checkOutTime')}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 h-[46px] text-xs font-bold focus:ring-2 focus:ring-blue-500 outline-none"
                   />
                 </div>
