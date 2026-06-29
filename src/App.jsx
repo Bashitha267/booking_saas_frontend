@@ -63,7 +63,7 @@ export default function App() {
         <Route path="property" element={<RequireRole allowed={['owner', 'admin']}><PropertyManagement /></RequireRole>} />
         <Route path="account" element={<RequireRole allowed={['owner', 'admin']}><Account /></RequireRole>} />
         <Route path="system-billing" element={<RequireRole allowed={['owner', 'admin']}><SystemBilling /></RequireRole>} />
-        <Route path="guests" element={<RequireRole allowed={['owner', 'admin']}><Guests /></RequireRole>} />
+        <Route path="guests" element={<RequireRole allowed={['owner', 'admin', 'staff']}><Guests /></RequireRole>} />
       </Route>
 
       <Route path="/admin" element={<RequireRole allowed={['admin']}><AdminLayout /></RequireRole>}>

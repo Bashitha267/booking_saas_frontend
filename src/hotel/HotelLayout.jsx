@@ -42,7 +42,12 @@ export default function HotelLayout() {
 
   const navItems = useMemo(() => {
     if (role === 'staff') {
-      return baseNavItems.filter((item) => item.name === 'Dashboard' || item.name === 'Bookings');
+      return baseNavItems.filter((item) => 
+        item.name === 'Dashboard' || 
+        item.name === 'Bookings' || 
+        item.name === 'Payments' || 
+        item.name === 'Guests'
+      );
     }
     return baseNavItems;
   }, [role]);

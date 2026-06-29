@@ -1509,7 +1509,7 @@ export default function Dashboard() {
         </div>
 
         {viewType === 'calendar' ? (
-          <div className="grid grid-cols-7 border-collapse">
+          <div className="grid grid-cols-7 border-collapse [--booking-row-height:24px] sm:[--booking-row-height:32px] [--booking-width-offset:8px] sm:[--booking-width-offset:16px]">
             {['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map(d => (
               <div key={d} className="py-4 text-center text-[10px] font-black text-slate-400 tracking-[0.2em] bg-slate-50/30 border-b border-slate-200">{d}</div>
             ))}
@@ -1521,21 +1521,32 @@ export default function Dashboard() {
                   onClick={() => {
                     openBookingModal(cell.date);
                   }}
-                  className={`h-40 border-r border-b border-slate-200 p-4 relative group hover:bg-slate-50/40 cursor-pointer ${cell.isOtherMonth ? 'bg-slate-50/20' : 'bg-white'}`}
+                  className={`h-28 sm:h-40 border-r border-b border-slate-200 p-1.5 sm:p-4 relative group hover:bg-slate-50/40 cursor-pointer ${cell.isOtherMonth ? 'bg-slate-50/20' : 'bg-white'}`}
                 >
-                  <div className={`text-sm font-black ${cell.isOtherMonth ? 'text-slate-200' : 'text-slate-400'} ${cell.isToday ? 'text-blue-600' : ''}`}>{cell.day}</div>
+                  <div className={`text-xs sm:text-sm font-black ${cell.isOtherMonth ? 'text-slate-200' : 'text-slate-400'} ${cell.isToday ? 'text-blue-600' : ''}`}>{cell.day}</div>
                   {cell.isToday && (
                     <div className="absolute inset-0 border-2 border-blue-600 z-10 pointer-events-none rounded-sm">
                       <div className="absolute top-2 right-2"><span className="text-[8px] font-black text-blue-600 tracking-widest uppercase bg-blue-50 px-1.5 py-0.5 rounded-md">Today</span></div>
                     </div>
                   )}
-                  <div className="mt-2 relative">
+                  <div className="mt-1 sm:mt-2 relative">
                     {bookings.map(b => {
-                      const isStart = new Date(b.checkInDate).toDateString() === cell.date.toDateString();
-                      if (isStart) {
+                      const start = new Date(b.checkInDate);
+                      const end = new Date(b.checkOutDate);
+                      start.setHours(0, 0, 0, 0);
+                      end.setHours(0, 0, 0, 0);
+                      const current = new Date(cell.date);
+                      current.setHours(0, 0, 0, 0);
+
+                      const isStart = start.getTime() === current.getTime();
+                      const isMonday = idx % 7 === 0;
+                      const isContinuing = current > start && current <= end;
+
+                      if (isStart || (isMonday && isContinuing)) {
                         const rowIndex = bookingRowMap[b.id] || 0;
                         if (rowIndex >= 2) return null;
                         const roomNumber = roomMap[b.roomId] || '';
+                        const remainingDays = Math.round((end - current) / 86400000) + 1;
                         return (
                           <div
                             key={b.id}
@@ -1543,10 +1554,10 @@ export default function Dashboard() {
                               e.stopPropagation();
                               navigate(`/hotel/bookings/${b.id}`);
                             }}
-                            className={`absolute left-2 h-7 rounded-lg px-3 flex items-center text-[9px] font-black z-20 shadow-md cursor-pointer whitespace-nowrap overflow-hidden transition-transform hover:scale-[1.02] ${b.status === 'confirmed' ? 'bg-emerald-500 text-white' : b.status === 'pending' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'}`}
+                            className={`absolute left-1 sm:left-2 h-5 sm:h-7 rounded-md sm:rounded-lg px-1.5 sm:px-3 flex items-center text-[8px] sm:text-[9px] font-black z-20 shadow-md cursor-pointer whitespace-nowrap overflow-hidden transition-transform hover:scale-[1.02] ${b.status === 'confirmed' ? 'bg-emerald-500 text-white' : b.status === 'pending' ? 'bg-amber-500 text-white' : 'bg-blue-600 text-white'}`}
                             style={{
-                              width: `calc(${Math.min(7 - (idx % 7), (new Date(b.checkOutDate) - new Date(b.checkInDate)) / 86400000 + 1)} * 100% - 16px)`,
-                              top: `${rowIndex * 32}px`
+                              width: `calc(${Math.min(7 - (idx % 7), remainingDays)} * 100% - var(--booking-width-offset, 16px))`,
+                              top: `calc(${rowIndex} * var(--booking-row-height, 32px))`
                             }}
                           >
                             <span className="truncate">
@@ -1560,22 +1571,34 @@ export default function Dashboard() {
                     })}
                   </div>
                   {(() => {
-                    const hiddenStartsCount = bookings.filter(b => {
-                      const isStart = new Date(b.checkInDate).toDateString() === cell.date.toDateString();
+                    const hiddenCount = bookings.filter(b => {
+                      const start = new Date(b.checkInDate);
+                      const end = new Date(b.checkOutDate);
+                      start.setHours(0, 0, 0, 0);
+                      end.setHours(0, 0, 0, 0);
+                      const current = new Date(cell.date);
+                      current.setHours(0, 0, 0, 0);
+
+                      const isStart = start.getTime() === current.getTime();
+                      const isMonday = idx % 7 === 0;
+                      const isContinuing = current > start && current <= end;
+
+                      const isSegmentStart = isStart || (isMonday && isContinuing);
                       const rowIndex = bookingRowMap[b.id] || 0;
-                      return isStart && rowIndex >= 2;
+                      return isSegmentStart && rowIndex >= 2;
                     }).length;
                     
-                    if (hiddenStartsCount > 0) {
+                    if (hiddenCount > 0) {
                       return (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setViewType('timeline');
                           }}
-                          className="absolute bottom-3 left-4 right-4 bg-white border border-slate-200 hover:bg-slate-50 text-blue-600 hover:text-blue-700 text-[10px] font-black uppercase tracking-widest py-2 rounded-xl text-center transition-all shadow-sm z-30 active:scale-95"
+                          className="absolute bottom-1 sm:bottom-3 left-1 sm:left-4 right-1 sm:right-4 bg-slate-100 border border-slate-200 hover:bg-slate-200 text-slate-700 hover:text-slate-800 text-[8px] sm:text-[10px] font-black uppercase sm:tracking-widest py-0.5 sm:py-2 rounded-md sm:rounded-xl text-center transition-all shadow-sm z-30 active:scale-95"
                         >
-                          View More (+{hiddenStartsCount})
+                          <span className="hidden sm:inline">View More (+{hiddenCount})</span>
+                          <span className="inline sm:hidden">+{hiddenCount}</span>
                         </button>
                       );
                     }
